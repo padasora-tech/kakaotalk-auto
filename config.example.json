@@ -1,0 +1,8 @@
+{
+  "app_password": "YOUR_PASSWORD_HERE",
+  "send_mode": "chat_folder",
+  "direct_msg": "안녕하세요 😊\n행복한 하루 되시길 바랍니다.\n\n- 담당자 드림",
+  "excel_path": "고객명단_양식.xlsx",
+  "delay_min": 2,
+  "delay_max": 4
+}
