@@ -5,3 +5,6 @@ __pycache__/
 *_backup.py
 test_find.py
 windows_dump.txt
+build/
+dist/
+*.spec
