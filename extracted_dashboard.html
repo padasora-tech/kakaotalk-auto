@@ -1,0 +1,283 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shinhan Life 카카오톡 고객 관리 프로그램</title>
+<style>
+:root {
+  --bg:#0A0F1D; --card:#111A2E; --card-border:#1E2D4A; --accent:#0066FF;
+  --text:#E2E8F0; --text-muted:#8A99AD; --success:#00E676; --danger:#FF3B30; --warning:#FFB300;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Malgun Gothic","Segoe UI",Roboto,sans-serif}
+body{background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+#lock-screen{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(5,10,20,0.92);backdrop-filter:blur(8px);z-index:9999;display:flex;align-items:center;justify-content:center}
+.lock-card{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:32px 28px;width:340px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.5)}
+.lock-title{font-size:16px;font-weight:700;margin-bottom:12px;color:var(--text)}
+.lock-input{width:100%;padding:10px 14px;background:#07132B;border:1px solid var(--card-border);border-radius:8px;color:#fff;font-size:14px;outline:none;margin-bottom:14px;text-align:center}
+.lock-input:focus{border-color:var(--accent)}
+.lock-btn{width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;transition:0.2s}
+.lock-btn:hover{background:#0052cc}
+.header{padding:16px 24px;border-bottom:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;background:#080E1B}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo-box{background:#0052cc;padding:4px 10px;border-radius:6px;font-weight:900;font-size:13px;color:#fff;letter-spacing:0.5px}
+h1{font-size:18px;font-weight:700;color:#fff}
+.body{display:flex;flex:1;padding:20px;gap:20px;overflow:hidden}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px;width:340px;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+.card-title{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
+.form{display:flex;flex-direction:column;gap:12px}
+label{font-size:12px;color:var(--text-muted);font-weight:600}
+select,input,textarea{background:#07132B;border:1px solid var(--card-border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;width:100%}
+select:focus,input:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:none;height:120px;line-height:1.4}
+.mode-select{border:2px solid var(--warning);background:#07132B;color:#FFF;font-weight:700}
+.save-btn{width:100%;margin-top:8px;padding:10px;border:none;border-radius:8px;background:linear-gradient(135deg,#002699,#0046FF);color:var(--text);font-size:13px;font-weight:700;cursor:pointer}
+.save-btn:hover{filter:brightness(1.15)}
+.right{flex:1;display:flex;flex-direction:column;gap:16px;overflow:hidden}
+.stats{display:flex;gap:16px}
+.stat{flex:1;background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:16px 20px}
+.stat-label{font-size:12px;color:var(--text-muted);margin-bottom:6px}
+.stat-val{font-size:24px;font-weight:800;color:#fff}
+.stat-val.acc{color:var(--accent)}
+.stat-val.suc{color:var(--success)}
+.stat-val.dan{color:var(--danger)}
+.log-wrap{flex:1;background:var(--card);border:1px solid var(--card-border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+.log-header{padding:12px 16px;border-bottom:1px solid var(--card-border);font-size:13px;font-weight:700;color:var(--text);display:flex;justify-content:space-between;align-items:center}
+.clear-btn{background:transparent;border:1px solid var(--card-border);color:var(--text-muted);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer}
+.clear-btn:hover{background:#1a263f;color:#fff}
+.log-body{flex:1;padding:14px 16px;overflow-y:auto;font-family:Consolas,monospace;font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:4px}
+.log-body div{word-break:break-all}
+.log-body .info{color:#A0AEC0}
+.log-body .success{color:var(--success)}
+.log-body .error{color:var(--danger)}
+.log-body .warn{color:var(--warning)}
+.log-time{color:#4A5568;margin-right:8px}
+.btn-ready{width:100%;padding:14px;border:none;border-radius:10px;background:linear-gradient(135deg,#00E676,#00C853);color:#000;font-size:15px;font-weight:900;cursor:pointer;display:none;margin-bottom:12px;box-shadow:0 4px 15px rgba(0,230,118,0.4);animation:pulse 1.5s infinite}
+@keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1)}}
+.controls{display:flex;gap:12px}
+.controls button{flex:1;padding:14px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:0.2s}
+.btn-start{background:linear-gradient(135deg,#0052cc,#0066FF);color:#fff}
+.btn-start:hover:not(:disabled){filter:brightness(1.15)}
+.btn-start:disabled{background:#1A263F;color:#4A5568;cursor:not-allowed}
+.btn-pause{background:linear-gradient(135deg,#FFB300,#FF8F00);color:#000}
+.btn-pause:disabled{background:#1A263F;color:#4A5568;cursor:not-allowed}
+.btn-stop{background:linear-gradient(135deg,#FF3B30,#D32F2F);color:#fff}
+.btn-stop:disabled{background:#1A263F;color:#4A5568;cursor:not-allowed}
+.status-bar{padding:8px 24px;border-top:1px solid var(--card-border);font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px;background:#080E1B}
+.dot{width:8px;height:8px;border-radius:50%;background:#4A5568}
+.dot.running{background:var(--success);box-shadow:0 0 8px var(--success)}
+</style>
+</head>
+<body>
+
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-title">🔒 카카오톡 고객 관리 보안 인증</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">시스템 접근을 위해 보안 비밀번호를 입력해 주세요.</div>
+    <input type="password" id="pass-input" class="lock-input" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')verifyPass()">
+    <button class="lock-btn" onclick="verifyPass()">🔓  인증 및 대시보드 접속</button>
+  </div>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo-box"><div class="brand-text">Shinhan Life</div></div>
+    <h1>카카오톡 고객 관리 프로그램</h1>
+  </div>
+</div>
+
+<div class="body">
+  <div class="card">
+    <div class="card-title">⚙️ 발송 옵션 설정</div>
+    <div class="form">
+      <label>📌 발송 방식 선택</label>
+      <select id="send_mode" class="mode-select">
+        <option value="chat_folder" selected>📁 [1옵션] 카톡 "기고객님들" 채팅 폴더 전원 자동 발송</option>
+        <option value="favorites">⭐ [2옵션] 카톡 즐겨찾기(Favorites) 목록 전원 자동 발송</option>
+      </select>
+
+      <div id="msg-config-box">
+        <label>💬 보낼 메시지 문구 (자유롭게 입력)</label>
+        <textarea id="direct_msg" placeholder="고객님, 이번 한 주도 기분 좋게 시작하세요! 😊"></textarea>
+      </div>
+
+      <label>⏱️ 발송 간격 (최소~최대 초)</label>
+      <div style="display:flex;gap:8px">
+        <input id="delay_min" type="number" min="1" value="2" style="width:50%">
+        <input id="delay_max" type="number" min="1" value="4" style="width:50%">
+      </div>
+
+      <button class="save-btn" onclick="saveConfig()">💾  설정 저장</button>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="stats">
+      <div class="stat"><div class="stat-label">📊 총 발송 대상</div><div class="stat-val acc" id="cnt-total">0</div></div>
+      <div class="stat"><div class="stat-label">✅ 전송 성공</div><div class="stat-val suc" id="cnt-ok">0</div></div>
+      <div class="stat"><div class="stat-label">❌ 실패</div><div class="stat-val dan" id="cnt-fail">0</div></div>
+    </div>
+    <div class="log-wrap">
+      <div class="log-header"><span>📜 실시간 발송 로그</span><button class="clear-btn" onclick="clearLog()">지우기</button></div>
+      <div class="log-body" id="log"></div>
+    </div>
+    <div>
+      <button class="btn-ready" id="btn-ready" onclick="setReady()">✅  카톡 목록 준비 완료! 자동 발송 시작!</button>
+      <div class="controls">
+        <button class="btn-start" id="btn-start" onclick="startAuto()">▶   자동 구동 시작</button>
+        <button class="btn-pause" id="btn-pause" onclick="togglePause()" disabled>⏸️  일시정지</button>
+        <button class="btn-stop"  id="btn-stop"  onclick="stopAuto()" disabled>⬛  중지</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar"><div class="dot" id="dot"></div><span id="status-txt">대기 중</span></div>
+
+<script>
+let lastLogCount = 0;
+let cfg = {};
+let isPaused = false;
+
+async function verifyPass() {
+  const p = document.getElementById('pass-input').value;
+  try {
+    const r = await fetch('/auth', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:p})});
+    const res = await r.json();
+    if(res.ok) {
+      document.getElementById('lock-screen').style.display = 'none';
+    } else {
+      alert('비밀번호가 일치하지 않습니다.');
+    }
+  } catch(e) {
+    alert('인증 서버 연결 오류: ' + e);
+  }
+}
+
+function loadKakaoConfig() {
+  document.getElementById('send_mode').value = cfg.send_mode || 'chat_folder';
+  document.getElementById('direct_msg').value = cfg.direct_msg || '고객님, 이번 한 주도 기분 좋게 시작하세요! 😊';
+  document.getElementById('delay_min').value = cfg.delay_min || 2;
+  document.getElementById('delay_max').value = cfg.delay_max || 4;
+}
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/config');
+    cfg = await r.json();
+    loadKakaoConfig();
+  } catch(e){}
+}
+
+async function saveConfig() {
+  cfg.send_mode = document.getElementById('send_mode').value;
+  cfg.direct_msg = document.getElementById('direct_msg').value;
+  cfg.delay_min = parseFloat(document.getElementById('delay_min').value)||2;
+  cfg.delay_max = parseFloat(document.getElementById('delay_max').value)||4;
+  await fetch('/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+  alert('설정이 저장되었습니다!');
+}
+
+async function startAuto() {
+  await saveConfig();
+  await fetch('/start', {method:'POST'});
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-pause').disabled = false;
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('btn-ready').style.display = 'block';
+  document.getElementById('dot').className = 'dot running';
+  document.getElementById('status-txt').textContent = '카톡 폴더 선택 대기 중...';
+}
+
+async function togglePause() {
+  const targetState = !isPaused;
+  await fetch('/pause', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pause: targetState})});
+}
+
+async function stopAuto() {
+  await fetch('/stop', {method:'POST'});
+  document.getElementById('cnt-total').textContent = '0';
+  document.getElementById('cnt-ok').textContent = '0';
+  document.getElementById('cnt-fail').textContent = '0';
+  document.getElementById('status-txt').textContent = '대기 중';
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-pause').disabled = true;
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('btn-ready').style.display = 'none';
+  document.getElementById('dot').className = 'dot';
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+  lastLogCount = 0;
+}
+
+async function setReady() {
+  await fetch('/ready', {method:'POST'});
+  document.getElementById('btn-ready').style.display = 'none';
+}
+
+async function poll() {
+  try {
+    const r = await fetch('/status');
+    const s = await r.json();
+
+    document.getElementById('cnt-total').textContent = s.total || 0;
+    document.getElementById('cnt-ok').textContent = s.success || 0;
+    document.getElementById('cnt-fail').textContent = s.fail || 0;
+    document.getElementById('status-txt').textContent = s.status || '대기 중';
+
+    isPaused = s.paused;
+    const btnPause = document.getElementById('btn-pause');
+    if (isPaused) {
+      btnPause.textContent = '▶️  재개(계속)';
+      btnPause.style.background = 'linear-gradient(135deg,#00E676,#00C853)';
+    } else {
+      btnPause.textContent = '⏸️  일시정지';
+      btnPause.style.background = 'linear-gradient(135deg,#FFB300,#FF8F00)';
+    }
+
+    const btnReady = document.getElementById('btn-ready');
+    if (s.running) {
+      document.getElementById('btn-start').disabled = true;
+      document.getElementById('btn-pause').disabled = false;
+      document.getElementById('btn-stop').disabled = false;
+      if (!isPaused) document.getElementById('dot').className = 'dot running';
+
+      if (!s.ready) {
+        btnReady.style.display = 'block';
+      } else {
+        btnReady.style.display = 'none';
+      }
+    } else {
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-pause').disabled = true;
+      document.getElementById('btn-stop').disabled = true;
+      document.getElementById('dot').className = 'dot';
+      btnReady.style.display = 'none';
+    }
+
+    if (s.logs && s.logs.length > lastLogCount) {
+      const lb = document.getElementById('log');
+      const newLogs = s.logs.slice(lastLogCount);
+      newLogs.forEach(l => {
+        try {
+          const d = document.createElement('div');
+          d.className = l.level || 'info';
+          const msgStr = String(l.msg || '').replace(/</g,'&lt;').replace(/\n/g, '<br>');
+          d.innerHTML = '<span class="log-time">['+(l.time||'')+']</span>' + msgStr;
+          lb.appendChild(d);
+        } catch(err){}
+      });
+      lastLogCount = s.logs.length;
+      lb.scrollTop = lb.scrollHeight;
+    }
+  } catch(e) {}
+  setTimeout(poll, 800);
+}
+
+loadConfig();
+poll();
+</script>
+</body>
+</html>

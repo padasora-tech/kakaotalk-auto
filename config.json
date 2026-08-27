@@ -1,8 +1,8 @@
 {
-  "app_password": "cjstk1004!!@@",
-  "send_mode": "chat_folder",
-  "direct_msg": "좋은 아침입니다 😊\n8월도 어느덧 마지막 주에 들어섰습니다! ^_^\n\n요즘 뉴스만 보면 금리, 환율, 주식시장 이야기들이 참 많습니다!\n시장이 오르기도 하고 내려가기도 하지만\n결국 중요한 건 하루하루의 숫자보다 내 삶을 흔들림 없이 잘 만들어 가가는 것 같습니다~~\n\n날씨도 아직 많이 더운데,\n바쁘시겠지만 식사 꼭 챙기시고 물도 자주 드세요~!!\n\n이번 한 주는 걱정보다는 좋은 소식이,\n바쁨보다는 여유가 조금 더 많은 한 주가 되셨으면 좋겠습니다.\n\n8월 마지막 주도 화이팅입니다! ~★\n\n신한라이프 _ 강동우 드림",
-  "excel_path": "C:\\Users\\padas\\OneDrive\\Desktop\\카카오톡_고객자동관리\\고객명단_양식.xlsx",
-  "delay_min": 2,
-  "delay_max": 4
+    "app_password": "cjstk1004!!@@",
+    "send_mode": "chat_folder",
+    "direct_msg": "고객님, 이번 한 주도 기분 좋게 시작하세요! 😊",
+    "excel_path": "C:\\Users\\padas\\Desktop\\카카오톡_고객자동관리\\고객명단_양식.xlsx",
+    "delay_min": 2,
+    "delay_max": 4
 }

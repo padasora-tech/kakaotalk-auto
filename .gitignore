@@ -1,2 +1,7 @@
-# 임시 파일만 제외
+﻿.venv/
+__pycache__/
+*.pyc
 *.tmp_read.xlsx
+*_backup.py
+test_find.py
+windows_dump.txt
