@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 정밀 순차 네비게이션 & [텍스트 ➔ 사진] 자동 발송 v55.0
-- Enter (방 열기) ➔ 텍스트 전송 ➔ 사진 전송 ➔ ESC (방 닫기) ➔ Down 방향키 (다음 방 이동)
-- 100% 무결점 키보드 네비게이션 방식
+main_app.py - 카카오톡 대화방 목록 정밀 순차 네비게이션 & [텍스트 ➔ 사진] 자동 발송 v56.0
+- 마우스 이동 100% 제거! 순수 키보드 단축키 방식 (Enter ➔ 텍스트 ➔ 사진 ➔ ESC ➔ Down)
+- 포트 15890 / 15874 / 15888 지원
 """
 import os
 import sys
@@ -135,11 +135,12 @@ def set_clipboard_image(image_path):
 
 def send_to_opened_room(msg_text="", image_path=None):
     """
-    [Enter] 키로 대화창을 열고 ➔ 텍스트/사진 전송 후 ➔ [ESC] 키로 닫아 목록으로 복귀합니다.
+    [Enter] 키로 대화창을 열고 ➔ [텍스트 ➔ 사진] 전송 후 ➔ [ESC] 키로 닫아 목록으로 복귀합니다.
+    (마우스는 일절 건드리지 않고 순수 키보드로만 작동합니다)
     """
     # 1. Enter 키로 대화방 열기
     pyautogui.press('enter')
-    time.sleep(0.7)  # 대화방 열리는 시간 대기
+    time.sleep(0.7)  # 대화창 열리는 시간 대기
 
     # 2. 텍스트 문구 전송 (있을 경우)
     if msg_text and msg_text.strip():
@@ -179,10 +180,10 @@ def worker_kakao_standalone():
     state["success"] = 0
     state["fail"] = 0
 
-    log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
+    log("🔌 PC 카카오톡 대화방 목록 순차 발송 준비 완료", "success")
     if image_to_send:
         log("📸 [텍스트 ➔ 사진 콤보 발송] 사진이 첨부되었습니다.", "info")
-    log("💬 카톡에서 원하시는 폴더('기고객님들' 등)의 [1번째 대화방]을 마우스로 1회 클릭해 두신 후,", "info")
+    log("💬 카톡의 [기고객님들] 폴더에서 [맨 위 1번째 대화방]을 마우스로 '딱 한 번' 클릭해 두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
     state["status"] = "1번째 대화방 선택 대기 중..."
@@ -214,7 +215,7 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 포커스 이동
+        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 한 칸씩 이동
         if idx > 1:
             pyautogui.press('down')
             time.sleep(0.3)
@@ -376,7 +377,7 @@ def start_server_on_port(port):
         pass
 
 def main():
-    ports = [15874, 15888]
+    ports = [15890, 15874, 15888]
     for p in ports:
         t = threading.Thread(target=start_server_on_port, args=(p,), daemon=True)
         t.start()

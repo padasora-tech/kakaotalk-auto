@@ -11,7 +11,11 @@ if '%errorlevel%' NEQ '0' (
 )
 
 taskkill /f /im pythonw.exe >nul 2>&1
+taskkill /f /im python.exe >nul 2>&1
+taskkill /f /im 카카오톡_고객자동관리.exe >nul 2>&1
+
+timeout /t 1 > nul
 start "" ".venv\Scripts\pythonw.exe" main_app.py
 timeout /t 1 > nul
-start chrome http://127.0.0.1:15888
+start chrome http://127.0.0.1:15890
 exit
