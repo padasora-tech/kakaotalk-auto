@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 3중 보장 [마우스 실시간 커서 이동 + Down 방향키 포커스 + Enter 오픈 + 텍스트/사진 콤보 발송] v62.0
-- 마우스 커서가 각 대화방 위치로 실시간으로 슥~ 이동 (시각적 피드백)
-- Down 방향키로 1칸씩 정확한 포커스 이동 보장
-- Enter 키로 대화창 100% 오픈 보장
-- [텍스트 ➔ 오늘자 카드뉴스 사진] 순차 전송 후 ESC 닫기
+main_app.py - 8월 27일 13:19 성공 원본 + 물리적 마우스 더블클릭 대화창 오픈 + [텍스트 ➔ 사진] 콤보 발송 최종본 v63.0
+- 마우스 커서가 대화방 위치로 이동 후 정확한 물리적 더블클릭(따닥!)으로 대화창 100% 오픈
+- [텍스트 ➔ 오늘자 카드뉴스 사진] 순차 전송 후 ESC 대화창 닫기
 - 15874 / 15888 / 15890 트리플 포트 지원
 """
 import os
@@ -36,7 +34,7 @@ MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 MOUSEEVENTF_WHEEL = 0x0800
 
-def win32_move_mouse_smooth(target_x, target_y, steps=12):
+def win32_move_mouse_smooth(target_x, target_y, steps=10):
     """마우스 커서가 눈에 보이도록 목표 지점으로 부드럽게 실시간 이동시킵니다."""
     try:
         class POINT(ctypes.Structure):
@@ -54,14 +52,35 @@ def win32_move_mouse_smooth(target_x, target_y, steps=12):
     except Exception:
         pass
 
-def win32_click(x, y):
-    """지정 좌표를 좌클릭합니다."""
+def win32_double_click_open(x, y):
+    """
+    마우스 커서를 대화방 위에 두고 물리적인 좌클릭 2회(더블클릭 따닥!)를 발생시켜
+    대화방 창을 100% 확실하게 띄웁니다.
+    """
+    user32.SetCursorPos(x, y)
+    time.sleep(0.05)
+    
+    # 1번째 클릭
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.04)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    
+    # 더블클릭 간격 (윈도우 표준 더블클릭 딜레이 60ms)
+    time.sleep(0.06)
+    
+    # 2번째 클릭 (더블클릭 완성)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.04)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    time.sleep(0.08)
+
+    # 혹시 모를 보조 Enter 키 (더블클릭 지원 보강)
+    pyautogui.press('enter')
+
+def win32_scroll_down(amount=-180):
+    """카카오톡 대화방 목록을 아래로 스크롤합니다."""
     try:
-        user32.SetCursorPos(x, y)
-        time.sleep(0.03)
-        user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        time.sleep(0.03)
-        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, amount, 0)
     except Exception:
         pass
 
@@ -174,9 +193,9 @@ def set_clipboard_image(image_path):
 
 def send_message_to_opened_room(msg_text="", image_path=None):
     """
-    열린 대화창에 [텍스트 ➔ 사진]을 차례대로 전송하고 ESC로 닫아 목록으로 복귀합니다.
+    열린 대화창에 [텍스트 ➔ 사진]을 순서대로 전송하고 ESC로 대화창을 닫습니다.
     """
-    time.sleep(0.7)  # 대화창 오픈 렌더링 대기
+    time.sleep(0.75)  # 대화창 렌더링 대기
 
     # 1. 텍스트 전송
     if msg_text and msg_text.strip():
@@ -187,7 +206,7 @@ def send_message_to_opened_room(msg_text="", image_path=None):
         pyautogui.press('enter')  # 텍스트 전송
         time.sleep(0.35)
 
-    # 2. 사진 전송
+    # 2. 사진(카드뉴스) 전송
     if image_path and os.path.exists(image_path):
         if set_clipboard_image(image_path):
             time.sleep(0.15)
@@ -196,16 +215,16 @@ def send_message_to_opened_room(msg_text="", image_path=None):
             pyautogui.press('enter')  # 사진 전송
             time.sleep(0.45)
 
-    # 3. 대화창 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
+    # 3. 대화방 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
     pyautogui.press('esc')
-    time.sleep(0.4)  # 포커스 복귀 안전 대기
+    time.sleep(0.35)
     return True, "전송 완료"
 
 def worker_kakao_standalone():
     k_cfg = load_config()
     delay_min = float(k_cfg.get("delay_min", 2))
     delay_max = float(k_cfg.get("delay_max", 4))
-    msg_template = k_cfg.get("direct_msg", "")
+    msg_template = k_cfg.get("direct_msg", "2026년 8월 28일 금요일 소식 전해 드립니다♡")
     
     image_to_send = TEMP_IMAGE_PATH if os.path.exists(TEMP_IMAGE_PATH) else None
 
@@ -218,11 +237,11 @@ def worker_kakao_standalone():
 
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
     if image_to_send:
-        log("📸 [텍스트 ➔ 사진 콤보 발송] 오늘의 카드뉴스 사진이 첨부되었습니다.", "info")
-    log("💬 카톡 우측의 [기고객님들] 폴더에서 [맨 위 1번째 대화방(강동우)]을 마우스로 '딱 한 번' 클릭해 두신 후,", "info")
+        log("📸 [텍스트 ➔ 사진 콤보 발송] 첨부된 카드뉴스 사진이 준비되었습니다.", "info")
+    log("💬 카톡 우측의 [기고객님들] 폴더를 띄워두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
-    state["status"] = "1번째 대화방 선택 대기 중..."
+    state["status"] = "카톡 폴더 선택 대기 중..."
 
     # 초록색 버튼(ready) 누를 때까지 대기
     while not state["ready"]:
@@ -232,15 +251,15 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 [마우스 실시간 커서 이동 & 순차 대화창 오픈 발송]을 시작합니다...", "info")
+    log("🚀 2초 후 [마우스 물리적 더블클릭 대화창 오픈 & 텍스트+사진 전송]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
-    # 2560x1600 해상도 분할 화면 기준 좌표
+    # 2560x1600 해상도 분할 화면 기준 좌표 (8월 27일 13:19 성공 원본 좌표)
     screen_w, screen_h = pyautogui.size()
     list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
-    start_y = int(screen_h * 0.075)   # 약 120px (1번째 대화방 Y좌표)
-    row_gap = int(screen_h * 0.044)   # 약 70px (각 대화방 간격)
+    start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
+    row_gap = int(screen_h * 0.045)   # 약 72px (각 대화방 간격)
     max_visible_rows = 11             # 화면에 보이는 방 개수
 
     max_limit = 500
@@ -258,27 +277,24 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # [마우스 순차 이동 위치 계산]
+        # [마우스 순차 더블클릭 위치 계산]
         if idx <= max_visible_rows:
             target_y = start_y + ((idx - 1) * row_gap)
         else:
             target_y = start_y + ((max_visible_rows - 1) * row_gap)
+            win32_move_mouse_smooth(list_x, target_y, steps=8)
+            win32_scroll_down(-180)
+            time.sleep(0.3)
 
-        # 2번째 방부터는 Down 방향키로 아래 방 선택 이동
-        if idx > 1:
-            pyautogui.press('down')
-            time.sleep(0.25)
-
-        # 마우스 커서를 해당 대화방 위치로 눈에 보이게 슥 이동 (시각적 효과)
-        win32_move_mouse_smooth(list_x, target_y, steps=10)
-        time.sleep(0.1)
-
-        log(f"[{idx}번째 고객 대화방] 대화창 열기 및 [텍스트+사진] 전송...", "info")
+        log(f"[{idx}번째 고객 대화방] 마우스 이동 및 더블클릭(따닥!) 대화창 오픈... (좌표: {list_x}, {target_y})", "info")
         
-        # Enter 키로 대화창 100% 오픈
-        pyautogui.press('enter')
+        # 1. 마우스 커서를 눈에 보이게 목표 대화방으로 부드럽게 이동
+        win32_move_mouse_smooth(list_x, target_y, steps=12)
+        
+        # 2. 물리적 더블클릭(따닥!)으로 대화방 창 100% 오픈
+        win32_double_click_open(list_x, target_y)
 
-        # 메시지 전송 및 ESC 닫기
+        # 3. [텍스트 ➔ 사진] 전송 후 ESC로 닫기
         ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
 
         if ok:
