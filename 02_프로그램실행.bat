@@ -10,17 +10,20 @@ if '%errorlevel%' NEQ '0' (
     exit /b
 )
 
+cd /d "%~dp0"
+
 taskkill /f /im pythonw.exe >nul 2>&1
 taskkill /f /im python.exe >nul 2>&1
 taskkill /f /im 카카오톡_고객자동관리.exe >nul 2>&1
 
-timeout /t 1 > nul
 if exist ".venv\Scripts\pythonw.exe" (
-    start "" ".venv\Scripts\pythonw.exe" main_app.py
+    start "" ".venv\Scripts\pythonw.exe" "%~dp0main_app.py"
+) else if exist "dist\카카오톡_고객자동관리\카카오톡_고객자동관리.exe" (
+    start "" "dist\카카오톡_고객자동관리\카카오톡_고객자동관리.exe"
 ) else (
     start "" "카카오톡_고객자동관리.exe"
 )
 
-timeout /t 1 > nul
+timeout /t 2 > nul
 start chrome http://127.0.0.1:15899
 exit

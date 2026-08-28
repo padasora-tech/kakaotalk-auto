@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 마우스 위치 캡처 더블클릭 시작 & Down 방향키 무제한 연속 발송 엔진 [신규 포트 15899] v70.0
-- 포트 15899 (구버전 프로세스 충돌 완전 회피)
-- 초록 버튼 누른 후 3초 동안 시작할 방(김광훈 고객님) 위에 마우스를 올려두면,
-- 1번째 방: 해당 마우스 좌표를 읽어와서 win32_double_click 으로 100% 대화창 짠 오픈! ➔ 전송 ➔ ESC 닫기
-- 2번째 방부터: 포커스가 확정되었으므로 Down 방향키(↓) 1회 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
+main_app.py - 사용자 시작 대화방 마우스 캡처 더블클릭 & Down 방향키 무제한 연속 발송 엔진 v71.0
+- 15899 포트 독립 실행
+- 초록 버튼 누른 후 3초 카운트다운 동안 사용자가 카톡의 시작할 방(김광훈 고객님) 위에 마우스 커서를 올려둠
+- 3초 후 마우스 위치 캡처 (0,0 예외 시 화면 우측 카톡 영역 자동 보정)
+- 1번째 방: win32_double_click 으로 100% 대화창 오픈 ➔ [텍스트 ➔ 사진] 전송 ➔ ESC 닫기
+- 2번째 방부터: Down 방향키(↓) 1회 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
 """
 import os
 import sys
@@ -224,7 +225,7 @@ def worker_kakao_standalone():
         time.sleep(0.2)
 
     # 초록 버튼 누른 후 3초 카운트다운 동안 마우스 커서를 시작할 대화방 위에 올려둡니다
-    log("⏳ [3초 카운트다운 시작] 카톡에서 시작할 대화방(김광훈 고객님) 위에 마우스 커서를 올려두세요!", "warn")
+    log("⏳ [3초 카운트다운] 카톡에서 시작할 대화방(김광훈 고객님) 위에 마우스 커서를 올려두세요!", "warn")
     for sec in [3, 2, 1]:
         if state["stop"] or not state["running"]:
             reset_state_to_idle()
@@ -233,9 +234,19 @@ def worker_kakao_standalone():
         state["status"] = f"{sec}초 후 발송 시작..."
         time.sleep(1.0)
 
-    # 3초 종료 시점의 마우스 커서 위치 캡처 (김광훈 고객님 위치!)
+    # 3초 종료 시점의 마우스 커서 위치 캡처
     start_pos = pyautogui.position()
-    log(f"🎯 시작 대화방 마우스 좌표 확정: ({start_pos.x}, {start_pos.y})", "success")
+    target_x = start_pos.x
+    target_y = start_pos.y
+
+    # 만약 좌표가 (0,0)이거나 너무 왼쪽이면 우측 카톡 화면으로 보정
+    sw, sh = pyautogui.size()
+    if target_x < sw * 0.4 or target_y < 100:
+        log("⚠️ 마우스 커서 위치 자동 보정 (카카오톡 대화방 목록 영역)", "warn")
+        target_x = int(sw * 0.72)
+        target_y = int(sh * 0.70)  # 김광훈 고객님 대략 위치
+
+    log(f"🎯 시작 대화방 마우스 좌표 확정: ({target_x}, {target_y})", "success")
     state["status"] = "발송 진행 중..."
 
     max_limit = 500
@@ -256,7 +267,7 @@ def worker_kakao_standalone():
         if idx == 1:
             # 1번째 방: 사용자가 마우스를 올려둔 바로 그 위치에서 윈도우 API 더블클릭으로 100% 대화창 오픈!
             log(f"[{idx}번째 전송 대상] 마우스 더블클릭으로 시작 대화방 오픈...", "info")
-            win32_double_click(start_pos.x, start_pos.y)
+            win32_double_click(target_x, target_y)
         else:
             # 2번째 방부터: 카톡 내부 포커스가 확정되었으므로 Down 방향키(↓)로 아래로 자동 스크롤 이동 ➔ Enter 오픈!
             log(f"[{idx}번째 전송 대상] ↓ 아래 방향키로 다음 대화방 이동...", "info")
@@ -427,7 +438,6 @@ def start_server_on_port(port):
         pass
 
 def main():
-    # 15899 포트를 최우선 메인 포트로 실행
     ports = [15899, 15874, 15888, 15890]
     for p in ports:
         t = threading.Thread(target=start_server_on_port, args=(p,), daemon=True)
