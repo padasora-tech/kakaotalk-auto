@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 [마우스 순차 컨택(클릭) ➔ 엔터키(Enter) 대화창 짠 오픈 ➔ 텍스트+사진 전송 ➔ ESC 닫기] 최종본 v65.0
-- 마우스 커서가 순차적으로 대화방을 1회 클릭하여 컨택(선택)
-- 엔터키(Enter)를 눌러 채팅방을 짠 하고 오픈
-- [텍스트 ➔ 사진] 순차 발송 후 ESC 닫기
-- 바로 아래 채팅방으로 이동 반복
+main_app.py - 카카오톡 사용자 선택 시작점 기준 & Down 방향키 무제한 순차 발송 엔진 [규칙 정립 최종본] v66.0
+- 규칙: 사용자가 카톡 목록에서 원하는 시작 대화방을 마우스로 1회 클릭 ➔ 초록버튼 클릭
+- 1번째 방: Enter 오픈 ➔ [텍스트 ➔ 사진] 전송 ➔ ESC 닫기
+- 다음 방들: Down 방향키(↓) 한 칸 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
+- 15874 / 15888 / 15890 모든 포트 완벽 지원
 """
 import os
 import sys
@@ -29,55 +29,18 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-# 윈도우 커널 마우스 및 키보드 제어 API
+# 윈도우 키보드 제어 API
 user32 = ctypes.windll.user32
-MOUSEEVENTF_LEFTDOWN = 0x0002
-MOUSEEVENTF_LEFTUP = 0x0004
-MOUSEEVENTF_WHEEL = 0x0800
 KEYEVENTF_KEYUP = 0x0002
 VK_RETURN = 0x0D
+VK_DOWN = 0x28
 VK_ESCAPE = 0x1B
 
-def win32_move_mouse_smooth(target_x, target_y, steps=8):
-    """마우스 커서가 눈에 보이도록 목표 지점으로 부드럽게 실시간 이동시킵니다."""
-    try:
-        class POINT(ctypes.Structure):
-            _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-        pt = POINT()
-        user32.GetCursorPos(ctypes.byref(pt))
-        curr_x, curr_y = pt.x, pt.y
-
-        for step in range(1, steps + 1):
-            ix = int(curr_x + (target_x - curr_x) * (step / steps))
-            iy = int(curr_y + (target_y - curr_y) * (step / steps))
-            user32.SetCursorPos(ix, iy)
-            time.sleep(0.015)
-        user32.SetCursorPos(target_x, target_y)
-    except Exception:
-        pass
-
-def win32_contact_room(x, y):
-    """마우스로 해당 대화방 위치를 딱 1번 클릭하여 카톡 창 활성화 및 대화방을 컨택(선택)합니다."""
-    user32.SetCursorPos(x, y)
-    time.sleep(0.05)
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.04)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.15)  # 컨택 선택 완료 대기
-
-def win32_press_enter():
-    """엔터키를 눌러 선택된 대화방을 짠 하고 엽니다."""
-    user32.keybd_event(VK_RETURN, 0, 0, 0)
-    time.sleep(0.05)
-    user32.keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, 0)
-    pyautogui.press('enter')  # 2중 보조 엔터
-
-def win32_scroll_down(amount=-180):
-    """카카오톡 대화방 목록을 아래로 스크롤합니다."""
-    try:
-        user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, amount, 0)
-    except Exception:
-        pass
+def win32_press_key(vk_code, delay=0.05):
+    """지정된 가상 키를 정확하게 누르고 뗍니다."""
+    user32.keybd_event(vk_code, 0, 0, 0)
+    time.sleep(delay)
+    user32.keybd_event(vk_code, 0, KEYEVENTF_KEYUP, 0)
 
 pyautogui.PAUSE = 0.04
 pyautogui.FAILSAFE = False
@@ -211,6 +174,7 @@ def send_message_to_opened_room(msg_text="", image_path=None):
             time.sleep(0.45)
 
     # 3. 대화방 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
+    win32_press_key(VK_ESCAPE, 0.05)
     pyautogui.press('esc')
     time.sleep(0.4)  # 포커스 복귀 대기
     return True, "전송 완료"
@@ -233,10 +197,10 @@ def worker_kakao_standalone():
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
     if image_to_send:
         log("📸 [텍스트 ➔ 사진 콤보 발송] 첨부된 카드뉴스 사진이 준비되었습니다.", "info")
-    log("💬 카톡 우측의 [기고객님들] 폴더를 띄워두신 후,", "info")
+    log("💬 [규칙] 카톡에서 발송을 시작할 대화방을 마우스로 '딱 한 번 클릭'하여 선택해 두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
-    state["status"] = "카톡 폴더 선택 대기 중..."
+    state["status"] = "시작 대화방 선택 대기 중..."
 
     # 초록색 버튼(ready) 누를 때까지 대기
     while not state["ready"]:
@@ -246,16 +210,9 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 1번째 대화방부터 [컨택 ➔ 엔터 오픈 ➔ 텍스트+사진 전송 ➔ ESC ➔ 다음 방]을 시작합니다...", "info")
+    log("🚀 2초 후 선택하신 시작 대화방부터 [엔터 오픈 ➔ 전송 ➔ ESC 닫기 ➔ ↓방향키 순차 이동]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
-
-    # 2560x1600 해상도 분할 화면 기준 좌표
-    screen_w, screen_h = pyautogui.size()
-    list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
-    start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
-    row_gap = int(screen_h * 0.045)   # 약 72px (각 대화방 간격)
-    max_visible_rows = 11             # 화면에 보이는 방 개수
 
     max_limit = 500
     state["total"] = max_limit
@@ -272,27 +229,20 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # [마우스 순차 이동 위치 계산]
-        if idx <= max_visible_rows:
-            target_y = start_y + ((idx - 1) * row_gap)
-        else:
-            target_y = start_y + ((max_visible_rows - 1) * row_gap)
-            win32_move_mouse_smooth(list_x, target_y, steps=6)
-            win32_scroll_down(-180)
-            time.sleep(0.3)
+        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 한 칸씩 이동 (카톡 자체 자동 스크롤)
+        if idx > 1:
+            log(f"[{idx}번째 고객 대화방] ↓ 아래 방향키로 다음 대화방 이동...", "info")
+            win32_press_key(VK_DOWN, 0.05)
+            pyautogui.press('down')
+            time.sleep(0.35)  # 포커스 이동 및 카톡 스크롤 대기
 
-        log(f"[{idx}번째 고객 대화방] 마우스 이동 ➔ 컨택(클릭) ➔ 엔터키로 대화창 짠 오픈...", "info")
+        log(f"[{idx}번째 고객 대화방] Enter 키로 대화창 열기...", "info")
         
-        # 1. 마우스 커서를 목표 대화방으로 부드럽게 이동
-        win32_move_mouse_smooth(list_x, target_y, steps=8)
-        
-        # 2. 마우스로 딱 1회 클릭하여 대화방 컨택(선택)
-        win32_contact_room(list_x, target_y)
+        # 엔터키로 대화창 오픈
+        win32_press_key(VK_RETURN, 0.05)
+        pyautogui.press('enter')
 
-        # 3. 엔터키(Enter)를 눌러 대화창을 짠! 하고 오픈
-        win32_press_enter()
-
-        # 4. 열린 대화창에 [텍스트 ➔ 사진] 전송 후 ESC 닫기
+        # [텍스트 ➔ 사진] 전송 후 ESC 닫기
         ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
 
         if ok:
