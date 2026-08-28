@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 마우스 실시간 커널 이동 & 클릭+엔터 대화창 오픈 순차 발송 v61.0
-- ctypes.windll.user32.SetCursorPos로 마우스 커서가 실시간으로 직접 이동
-- 마우스 클릭 + Enter로 대화방 100% 오픈 보장
-- 텍스트 전송 후 ESC 닫기
-- 포트 15874 / 15888 / 15890 트리플 포트 지원
+main_app.py - 카카오톡 대화방 목록 3중 보장 [마우스 실시간 커서 이동 + Down 방향키 포커스 + Enter 오픈 + 텍스트/사진 콤보 발송] v62.0
+- 마우스 커서가 각 대화방 위치로 실시간으로 슥~ 이동 (시각적 피드백)
+- Down 방향키로 1칸씩 정확한 포커스 이동 보장
+- Enter 키로 대화창 100% 오픈 보장
+- [텍스트 ➔ 오늘자 카드뉴스 사진] 순차 전송 후 ESC 닫기
+- 15874 / 15888 / 15890 트리플 포트 지원
 """
 import os
 import sys
@@ -13,11 +14,14 @@ import time
 import random
 import threading
 import datetime
+import io
 import ctypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import pyautogui
 import pyperclip
+from PIL import Image
+import win32clipboard
 
 if sys.platform.startswith("win"):
     try:
@@ -32,56 +36,51 @@ MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 MOUSEEVENTF_WHEEL = 0x0800
 
-def win32_move_mouse_smooth(target_x, target_y, steps=15):
+def win32_move_mouse_smooth(target_x, target_y, steps=12):
     """마우스 커서가 눈에 보이도록 목표 지점으로 부드럽게 실시간 이동시킵니다."""
-    class POINT(ctypes.Structure):
-        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-    pt = POINT()
-    user32.GetCursorPos(ctypes.byref(pt))
-    curr_x, curr_y = pt.x, pt.y
+    try:
+        class POINT(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+        pt = POINT()
+        user32.GetCursorPos(ctypes.byref(pt))
+        curr_x, curr_y = pt.x, pt.y
 
-    for step in range(1, steps + 1):
-        ix = int(curr_x + (target_x - curr_x) * (step / steps))
-        iy = int(curr_y + (target_y - curr_y) * (step / steps))
-        user32.SetCursorPos(ix, iy)
-        time.sleep(0.015)
-    user32.SetCursorPos(target_x, target_y)
+        for step in range(1, steps + 1):
+            ix = int(curr_x + (target_x - curr_x) * (step / steps))
+            iy = int(curr_y + (target_y - curr_y) * (step / steps))
+            user32.SetCursorPos(ix, iy)
+            time.sleep(0.015)
+        user32.SetCursorPos(target_x, target_y)
+    except Exception:
+        pass
 
-def win32_click_and_open(x, y):
-    """목표 대화방 위치를 클릭하여 포커스를 잡고 더블클릭+엔터로 대화창을 100% 확실하게 엽니다."""
-    user32.SetCursorPos(x, y)
-    time.sleep(0.05)
-    # 1. 좌클릭 1회 (포커스 활성화)
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.03)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.08)
-    # 2. 좌클릭 2회차 (더블클릭 완성)
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.03)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.1)
-    # 3. 보조 Enter 키 (더블클릭이 씹히는 윈도우 환경에서도 100% 오픈 보장)
-    pyautogui.press('enter')
+def win32_click(x, y):
+    """지정 좌표를 좌클릭합니다."""
+    try:
+        user32.SetCursorPos(x, y)
+        time.sleep(0.03)
+        user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        time.sleep(0.03)
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    except Exception:
+        pass
 
-def win32_scroll_down(amount=-180):
-    """카카오톡 대화방 목록을 아래로 스크롤합니다."""
-    user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, amount, 0)
-
-pyautogui.PAUSE = 0.05
+pyautogui.PAUSE = 0.04
 pyautogui.FAILSAFE = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 HTML_FILE = os.path.join(BASE_DIR, "extracted_dashboard.html")
+TEMP_IMAGE_PATH = os.path.join(BASE_DIR, "temp_attached_image.png")
 
 DEFAULT_CONFIG = {
     "app_password": "cjstk1004!!@@",
     "send_mode": "chat_folder",
-    "direct_msg": "안녕하세요 고객님, 이번 한 주도 기분 좋게 시작하세요! 😊",
+    "direct_msg": "2026년 8월 28일 금요일 소식 전해 드립니다♡",
     "excel_path": "고객명단_양식.xlsx",
     "delay_min": 2,
-    "delay_max": 4
+    "delay_max": 4,
+    "has_image": True
 }
 
 state = {
@@ -103,10 +102,13 @@ def load_config():
                 loaded = json.load(f)
                 cfg = DEFAULT_CONFIG.copy()
                 cfg.update(loaded)
+                cfg["has_image"] = os.path.exists(TEMP_IMAGE_PATH)
                 return cfg
         except Exception:
             pass
-    return DEFAULT_CONFIG.copy()
+    cfg = DEFAULT_CONFIG.copy()
+    cfg["has_image"] = os.path.exists(TEMP_IMAGE_PATH)
+    return cfg
 
 def save_config(cfg):
     try:
@@ -152,32 +154,60 @@ def set_clipboard_text(text):
             time.sleep(0.05)
     return True
 
-def send_message_to_opened_room(msg_text=""):
+def set_clipboard_image(image_path):
+    """윈도우 클립보드에 이미지(DIB)를 복사하여 카카오톡에 Ctrl+V로 붙여넣을 수 있게 합니다."""
+    try:
+        img = Image.open(image_path)
+        output = io.BytesIO()
+        img.convert("RGB").save(output, "BMP")
+        data = output.getvalue()[14:]
+        output.close()
+
+        win32clipboard.OpenClipboard()
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+        win32clipboard.CloseClipboard()
+        return True
+    except Exception as e:
+        log(f"이미지 클립보드 복사 실패: {e}", "error")
+        return False
+
+def send_message_to_opened_room(msg_text="", image_path=None):
     """
-    열린 대화창에 메시지를 붙여넣고 전송한 뒤 ESC로 닫습니다.
+    열린 대화창에 [텍스트 ➔ 사진]을 차례대로 전송하고 ESC로 닫아 목록으로 복귀합니다.
     """
     time.sleep(0.7)  # 대화창 오픈 렌더링 대기
 
-    # 1. 메시지 붙여넣기
+    # 1. 텍스트 전송
     if msg_text and msg_text.strip():
         set_clipboard_text(msg_text)
         time.sleep(0.1)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.25)
-        # 2. 메시지 전송
-        pyautogui.press('enter')
+        pyautogui.press('enter')  # 텍스트 전송
         time.sleep(0.35)
 
-    # 3. 대화방 닫기 (ESC)
+    # 2. 사진 전송
+    if image_path and os.path.exists(image_path):
+        if set_clipboard_image(image_path):
+            time.sleep(0.15)
+            pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.35)
+            pyautogui.press('enter')  # 사진 전송
+            time.sleep(0.45)
+
+    # 3. 대화창 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
     pyautogui.press('esc')
-    time.sleep(0.35)
+    time.sleep(0.4)  # 포커스 복귀 안전 대기
     return True, "전송 완료"
 
 def worker_kakao_standalone():
     k_cfg = load_config()
     delay_min = float(k_cfg.get("delay_min", 2))
     delay_max = float(k_cfg.get("delay_max", 4))
-    msg_template = k_cfg.get("direct_msg", "고객님, 이번 한 주도 기분 좋게 시작하세요! 😊")
+    msg_template = k_cfg.get("direct_msg", "")
+    
+    image_to_send = TEMP_IMAGE_PATH if os.path.exists(TEMP_IMAGE_PATH) else None
 
     state["running"] = True
     state["paused"] = False
@@ -187,10 +217,12 @@ def worker_kakao_standalone():
     state["fail"] = 0
 
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
-    log("💬 카톡에서 '기고객님들' 폴더를 띄워두신 후,", "info")
-    log("👉 대시보드의 [✅ 카톡 목록 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
+    if image_to_send:
+        log("📸 [텍스트 ➔ 사진 콤보 발송] 오늘의 카드뉴스 사진이 첨부되었습니다.", "info")
+    log("💬 카톡 우측의 [기고객님들] 폴더에서 [맨 위 1번째 대화방(강동우)]을 마우스로 '딱 한 번' 클릭해 두신 후,", "info")
+    log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
-    state["status"] = "카톡 폴더 선택 대기 중..."
+    state["status"] = "1번째 대화방 선택 대기 중..."
 
     # 초록색 버튼(ready) 누를 때까지 대기
     while not state["ready"]:
@@ -200,21 +232,16 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 [마우스 실시간 이동 & 대화창 오픈 발송]을 시작합니다...", "info")
+    log("🚀 2초 후 [마우스 실시간 커서 이동 & 순차 대화창 오픈 발송]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
     # 2560x1600 해상도 분할 화면 기준 좌표
     screen_w, screen_h = pyautogui.size()
-    
-    # 카카오톡 창 좌측 목록 영역 (오른쪽 절반 화면 기준 x=1548)
-    list_x = int(screen_w * 0.605)
-    
-    # 1번째 줄 y좌표: 약 152px
-    # 각 대화방 사이의 간격: 약 72px
-    start_y = int(screen_h * 0.095)  # 152px
-    row_gap = int(screen_h * 0.045)  # 72px
-    max_visible_rows = 11            # 화면에 보이는 방 개수
+    list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
+    start_y = int(screen_h * 0.075)   # 약 120px (1번째 대화방 Y좌표)
+    row_gap = int(screen_h * 0.044)   # 약 70px (각 대화방 간격)
+    max_visible_rows = 11             # 화면에 보이는 방 개수
 
     max_limit = 500
     state["total"] = max_limit
@@ -236,20 +263,23 @@ def worker_kakao_standalone():
             target_y = start_y + ((idx - 1) * row_gap)
         else:
             target_y = start_y + ((max_visible_rows - 1) * row_gap)
-            win32_move_mouse_smooth(list_x, target_y, steps=10)
-            win32_scroll_down(-180)
-            time.sleep(0.3)
 
-        log(f"[{idx}번째 고객 대화방] 마우스 이동 및 대화창 열기... (좌표: {list_x}, {target_y})", "info")
-        
-        # 1. 마우스 커서가 눈에 보이게 목표 방으로 슥 이동
-        win32_move_mouse_smooth(list_x, target_y, steps=15)
-        
-        # 2. 클릭 + 엔터로 대화방 100% 오픈
-        win32_click_and_open(list_x, target_y)
+        # 2번째 방부터는 Down 방향키로 아래 방 선택 이동
+        if idx > 1:
+            pyautogui.press('down')
+            time.sleep(0.25)
 
-        # 3. 메시지 입력 및 전송 후 ESC 닫기
-        ok, res_msg = send_message_to_opened_room(msg_template)
+        # 마우스 커서를 해당 대화방 위치로 눈에 보이게 슥 이동 (시각적 효과)
+        win32_move_mouse_smooth(list_x, target_y, steps=10)
+        time.sleep(0.1)
+
+        log(f"[{idx}번째 고객 대화방] 대화창 열기 및 [텍스트+사진] 전송...", "info")
+        
+        # Enter 키로 대화창 100% 오픈
+        pyautogui.press('enter')
+
+        # 메시지 전송 및 ESC 닫기
+        ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
 
         if ok:
             success_count += 1
@@ -312,10 +342,23 @@ class Handler(BaseHTTPRequestHandler):
                 "success": state["success"],
                 "fail": state["fail"],
                 "status": state["status"],
-                "logs": state["logs"]
+                "logs": state["logs"],
+                "has_image": os.path.exists(TEMP_IMAGE_PATH)
             })
         elif parsed.path == "/config":
             self._send_json(load_config())
+        elif parsed.path == "/preview_image":
+            if os.path.exists(TEMP_IMAGE_PATH):
+                with open(TEMP_IMAGE_PATH, "rb") as f:
+                    img_data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(img_data)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(img_data)
+            else:
+                self.send_error(404)
         else:
             self.send_error(404)
 
@@ -366,6 +409,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True})
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 400)
+        elif parsed.path == "/api/upload_image":
+            try:
+                raw_bytes = self._read_body()
+                with open(TEMP_IMAGE_PATH, "wb") as f:
+                    f.write(raw_bytes)
+                log("📸 새로운 사진/이미지가 성공적으로 첨부되었습니다.", "success")
+                self._send_json({"ok": True, "msg": "이미지 업로드 성공"})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
+        elif parsed.path == "/api/clear_image":
+            try:
+                if os.path.exists(TEMP_IMAGE_PATH):
+                    os.remove(TEMP_IMAGE_PATH)
+                log("🗑️ 첨부된 사진이 제거되었습니다. (텍스트 단독 발송 모드)", "info")
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
         else:
             self.send_error(404)
 
