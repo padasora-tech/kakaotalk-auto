@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 마우스 절대좌표 더블클릭 순차 전송 (GitHub 원본 복원 버전)
+main_app.py - 카카오톡 대화방 목록 마우스 순차 더블클릭 & [텍스트 ➔ 사진] 자동 발송 최종본 v60.0
+- 초록색 버튼 클릭 시 즉시 2초 후 1번째 방부터 차례대로 더블클릭 진입
+- 대화창 오픈 ➔ 텍스트 전송 ➔ 사진 전송 ➔ ESC 닫기
+- 15874 / 15888 / 15890 모든 포트 완벽 동시 지원
 """
 import os
 import sys
@@ -35,11 +38,11 @@ TEMP_IMAGE_PATH = os.path.join(BASE_DIR, "temp_attached_image.png")
 DEFAULT_CONFIG = {
     "app_password": "cjstk1004!!@@",
     "send_mode": "chat_folder",
-    "direct_msg": "안녕하세요 고객님, 이번 한 주도 기분 좋게 시작하세요! 😊",
+    "direct_msg": "2026년 8월 28일 금요일 소식 전해 드립니다♡",
     "excel_path": "고객명단_양식.xlsx",
     "delay_min": 2,
     "delay_max": 4,
-    "has_image": False
+    "has_image": True
 }
 
 state = {
@@ -157,55 +160,37 @@ def send_message_to_current_open_room(msg_text="", image_path=None):
 
     # 3. 대화방 닫기 (ESC)
     pyautogui.press('esc')
-    time.sleep(0.3)
+    time.sleep(0.35)
     return True, "전송 완료"
 
 def worker_kakao_standalone():
     k_cfg = load_config()
     delay_min = float(k_cfg.get("delay_min", 2))
     delay_max = float(k_cfg.get("delay_max", 4))
-    msg_template = k_cfg.get("direct_msg", "고객님, 이번 한 주도 기분 좋게 시작하세요! 😊")
+    msg_template = k_cfg.get("direct_msg", "")
     
     image_to_send = TEMP_IMAGE_PATH if os.path.exists(TEMP_IMAGE_PATH) else None
 
     state["running"] = True
     state["paused"] = False
     state["stop"] = False
-    state["ready"] = False
     state["success"] = 0
     state["fail"] = 0
 
-    log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
+    log("🔌 [카카오톡 자동 발송] 작업이 시작되었습니다.", "success")
     if image_to_send:
-        log("📸 [텍스트 ➔ 사진 콤보 발송] 사진이 첨부되었습니다.", "info")
-    log("💬 카톡에서 원하시는 폴더('기고객님들' 등)를 띄워두신 후,", "info")
-    log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
+        log("📸 [텍스트 ➔ 사진 콤보 발송] 오늘의 카드뉴스 사진이 첨부되었습니다.", "info")
 
-    state["status"] = "카톡 폴더 선택 대기 중..."
-
-    # 초록색 버튼(ready) 누를 때까지 대기
-    while not state["ready"]:
-        if state["stop"] or not state["running"]:
-            log("⬛ 준비 단계에서 작업이 중지되었습니다.", "warn")
-            reset_state_to_idle()
-            return
-        time.sleep(0.3)
-
-    log("🚀 2초 후 [마우스 물리적 순차 더블클릭] 발송을 시작합니다...", "info")
+    log("🚀 2초 후 1번째 대화방부터 [마우스 순차 더블클릭 전송]을 시작합니다...", "warn")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
-    # 2560x1600 해상도 분할 화면 기준 좌표 (GitHub 원본 그대로)
+    # 2560x1600 해상도 분할 화면 기준 좌표
     screen_w, screen_h = pyautogui.size()
-    
-    # 카카오톡 창 좌측 목록 영역 (오른쪽 절반 화면 기준 x=1550)
-    list_x = int(screen_w * 0.605)
-    
-    # 1번째 줄 y좌표: 약 150px
-    # 각 대화방 사이의 간격: 약 72px
-    start_y = int(screen_h * 0.095)  # 152px
-    row_gap = int(screen_h * 0.045)  # 72px
-    max_visible_rows = 11            # 화면에 보이는 방 개수
+    list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
+    start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
+    row_gap = int(screen_h * 0.045)   # 약 72px (각 대화방 간격)
+    max_visible_rows = 11             # 화면에 보이는 방 개수
 
     max_limit = 500
     state["total"] = max_limit
@@ -224,18 +209,16 @@ def worker_kakao_standalone():
 
         # [마우스 순차 더블클릭 위치 계산]
         if idx <= max_visible_rows:
-            # 화면에 보이는 1번째~11번째 줄을 위에서부터 아래로 차례대로 이동
             target_y = start_y + ((idx - 1) * row_gap)
         else:
-            # 12번째부터는 맨 아래 줄 위치를 클릭하기 전 목록을 아래로 스크롤
             target_y = start_y + ((max_visible_rows - 1) * row_gap)
             pyautogui.moveTo(list_x, target_y)
             pyautogui.scroll(-150)
             time.sleep(0.3)
 
-        log(f"[{idx}번째 고객 대화방] 마우스 더블클릭 진입... (좌표: {list_x}, {target_y})", "info")
-        
-        # 키보드 포커스 문제 없는 100% 확실한 마우스 더블클릭 진입
+        log(f"[{idx}번째 고객 대화방] 마우스 이동 및 더블클릭 진입... (좌표: {list_x}, {target_y})", "info")
+        pyautogui.moveTo(list_x, target_y)
+        time.sleep(0.1)
         pyautogui.doubleClick(list_x, target_y)
 
         ok, res_msg = send_message_to_current_open_room(msg_template, image_to_send)
@@ -336,6 +319,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "msg": str(e)}, 400)
         elif parsed.path == "/start":
             if not state["running"]:
+                state["ready"] = True
                 t = threading.Thread(target=worker_kakao_standalone, daemon=True)
                 t.start()
             self._send_json({"ok": True})
