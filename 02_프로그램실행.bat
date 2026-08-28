@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 > nul
 cd /d "%~dp0"
 title 신한라이프 카카오톡 고객 관리 프로그램 v2.0
@@ -13,5 +13,5 @@ if '%errorlevel%' NEQ '0' (
 taskkill /f /im pythonw.exe >nul 2>&1
 start "" ".venv\Scripts\pythonw.exe" main_app.py
 timeout /t 1 > nul
-start chrome http://127.0.0.1:15874
+start chrome http://127.0.0.1:15888
 exit
