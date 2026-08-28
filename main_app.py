@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 완벽 활성화 & 물리적 더블클릭 오픈 & [텍스트 ➔ 사진] 순차 발송 최종본 v64.0
-- 마우스 이동 ➔ 1회 클릭으로 창 활성화 ➔ 정밀 더블클릭(따닥!) + Enter로 대화방 100% 오픈
-- [텍스트 ➔ 사진] 순차 전송 ➔ ESC 닫기 ➔ 바로 아래 채팅방으로 이동
-- 15874 / 15888 / 15890 모든 포트 지원
+main_app.py - 카카오톡 대화방 목록 [마우스 순차 컨택(클릭) ➔ 엔터키(Enter) 대화창 짠 오픈 ➔ 텍스트+사진 전송 ➔ ESC 닫기] 최종본 v65.0
+- 마우스 커서가 순차적으로 대화방을 1회 클릭하여 컨택(선택)
+- 엔터키(Enter)를 눌러 채팅방을 짠 하고 오픈
+- [텍스트 ➔ 사진] 순차 발송 후 ESC 닫기
+- 바로 아래 채팅방으로 이동 반복
 """
 import os
 import sys
@@ -28,13 +29,16 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-# 윈도우 커널 마우스 제어 API
+# 윈도우 커널 마우스 및 키보드 제어 API
 user32 = ctypes.windll.user32
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 MOUSEEVENTF_WHEEL = 0x0800
+KEYEVENTF_KEYUP = 0x0002
+VK_RETURN = 0x0D
+VK_ESCAPE = 0x1B
 
-def win32_move_mouse_smooth(target_x, target_y, steps=10):
+def win32_move_mouse_smooth(target_x, target_y, steps=8):
     """마우스 커서가 눈에 보이도록 목표 지점으로 부드럽게 실시간 이동시킵니다."""
     try:
         class POINT(ctypes.Structure):
@@ -52,35 +56,21 @@ def win32_move_mouse_smooth(target_x, target_y, steps=10):
     except Exception:
         pass
 
-def win32_activate_and_double_click_open(x, y):
-    """
-    [1단계] 카카오톡 창 활성화 클릭 ➔ [2단계] 정밀 물리적 더블클릭(따닥!) ➔ [3단계] 보조 Enter
-    비활성 상태인 카카오톡 창도 100% 무조건 대화방 팝업창을 엽니다.
-    """
-    # 1. 마우스 위치 고정
+def win32_contact_room(x, y):
+    """마우스로 해당 대화방 위치를 딱 1번 클릭하여 카톡 창 활성화 및 대화방을 컨택(선택)합니다."""
     user32.SetCursorPos(x, y)
     time.sleep(0.05)
-
-    # 2. [1단계: 창 활성화 및 해당 대화방 선택 클릭]
     user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
     time.sleep(0.04)
     user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.15)  # 창 활성화 대기
+    time.sleep(0.15)  # 컨택 선택 완료 대기
 
-    # 3. [2단계: 확실한 물리적 더블클릭 따닥!]
-    # 첫번째 탭
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.04)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.06)  # 더블클릭 인터벌 (60ms)
-    # 두번째 탭
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.04)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.1)
-
-    # 4. [3단계: 보조 Enter 키 (더블클릭 지원 100% 보장)]
-    pyautogui.press('enter')
+def win32_press_enter():
+    """엔터키를 눌러 선택된 대화방을 짠 하고 엽니다."""
+    user32.keybd_event(VK_RETURN, 0, 0, 0)
+    time.sleep(0.05)
+    user32.keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, 0)
+    pyautogui.press('enter')  # 2중 보조 엔터
 
 def win32_scroll_down(amount=-180):
     """카카오톡 대화방 목록을 아래로 스크롤합니다."""
@@ -256,11 +246,11 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 1번째 대화방부터 [더블클릭 오픈 ➔ 메시지 전송 ➔ ESC ➔ 다음 방]을 시작합니다...", "info")
+    log("🚀 2초 후 1번째 대화방부터 [컨택 ➔ 엔터 오픈 ➔ 텍스트+사진 전송 ➔ ESC ➔ 다음 방]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
-    # 2560x1600 해상도 분할 화면 기준 좌표 (1번째 대화방 ~ 순차 간격)
+    # 2560x1600 해상도 분할 화면 기준 좌표
     screen_w, screen_h = pyautogui.size()
     list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
     start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
@@ -282,7 +272,7 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # [마우스 순차 더블클릭 위치 계산]
+        # [마우스 순차 이동 위치 계산]
         if idx <= max_visible_rows:
             target_y = start_y + ((idx - 1) * row_gap)
         else:
@@ -291,15 +281,18 @@ def worker_kakao_standalone():
             win32_scroll_down(-180)
             time.sleep(0.3)
 
-        log(f"[{idx}번째 고객 대화방] 마우스 이동 ➔ 더블클릭 대화창 열기... (좌표: {list_x}, {target_y})", "info")
+        log(f"[{idx}번째 고객 대화방] 마우스 이동 ➔ 컨택(클릭) ➔ 엔터키로 대화창 짠 오픈...", "info")
         
-        # 1. 마우스 커서를 눈에 보이게 목표 대화방으로 부드럽게 이동
-        win32_move_mouse_smooth(list_x, target_y, steps=10)
+        # 1. 마우스 커서를 목표 대화방으로 부드럽게 이동
+        win32_move_mouse_smooth(list_x, target_y, steps=8)
         
-        # 2. 창 활성화 + 물리적 더블클릭(따닥!)으로 대화방 100% 오픈
-        win32_activate_and_double_click_open(list_x, target_y)
+        # 2. 마우스로 딱 1회 클릭하여 대화방 컨택(선택)
+        win32_contact_room(list_x, target_y)
 
-        # 3. 열린 대화창에 [텍스트 ➔ 사진] 전송 후 ESC 닫기
+        # 3. 엔터키(Enter)를 눌러 대화창을 짠! 하고 오픈
+        win32_press_enter()
+
+        # 4. 열린 대화창에 [텍스트 ➔ 사진] 전송 후 ESC 닫기
         ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
 
         if ok:
