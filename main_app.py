@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 사용자 현재 선택 대화방 기준 100% 시작 & Down 방향키 순차 발송 엔진 v67.0
-- 시작 시 마우스를 맨 위로 이동하지 않고, 사용자가 선택해 둔 바로 그 방에서 즉시 Enter 오픈!
-- 1번째 방: Enter 오픈 ➔ [텍스트 ➔ 사진] 전송 ➔ ESC 닫기
-- 2번째 방부터: Down 방향키(↓) 1회 이동 ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
-- 15874 / 15888 / 15890 모든 포트 지원
+main_app.py - 사용자 시작 대화방 100% 선택 & Down 방향키 무제한 연속 발송 엔진 v68.0
+- 초록 버튼 클릭 후 3초 카운트다운 (사용자가 카톡에서 시작할 방을 클릭하여 활성화할 시간 제공)
+- 1번째 방: 활성화된 바로 그 방에서 Enter 오픈 ➔ [텍스트 ➔ 사진] 전송 ➔ ESC 닫기
+- 2번째 방부터: Down 방향키(↓) 1회 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
+- 15874 / 15888 / 15890 모든 포트 완벽 지원
 """
 import os
 import sys
@@ -197,10 +197,9 @@ def worker_kakao_standalone():
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
     if image_to_send:
         log("📸 [텍스트 ➔ 사진 콤보 발송] 첨부된 카드뉴스 사진이 준비되었습니다.", "info")
-    log("💬 카톡에서 시작할 대화방을 마우스로 '딱 한 번 클릭'하여 선택해 두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
-    state["status"] = "시작 대화방 선택 대기 중..."
+    state["status"] = "준비 완료 버튼 대기 중..."
 
     # 초록색 버튼(ready) 누를 때까지 대기
     while not state["ready"]:
@@ -210,9 +209,18 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 [선택하신 바로 그 대화방]부터 발송을 시작합니다...", "info")
+    # 초록 버튼 누른 후 3초 카운트다운 (사용자가 카톡의 시작 대화방을 클릭하여 활성화할 시간)
+    log("⏳ [3초 카운트다운 시작] 카카오톡 창에서 시작할 대화방(예: 김광훈 고객님)을 마우스로 딱 클릭해 주세요!", "warn")
+    for sec in [3, 2, 1]:
+        if state["stop"] or not state["running"]:
+            reset_state_to_idle()
+            return
+        log(f"⏰ {sec}초 후 선택하신 바로 그 대화방부터 발송이 시작됩니다...", "info")
+        state["status"] = f"{sec}초 후 발송 시작..."
+        time.sleep(1.0)
+
+    log("🚀 [발송 시작] 선택하신 시작 대화방의 대화창을 오픈합니다!", "success")
     state["status"] = "발송 진행 중..."
-    time.sleep(2.0)
 
     max_limit = 500
     state["total"] = max_limit
@@ -229,8 +237,8 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # 1번째 방은 사용자가 이미 마우스로 선택해 둔 바로 그 방이므로 이동 없이 즉시 Enter 오픈!
-        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 한 칸씩 이동!
+        # 1번째 방: 사용자가 방금 클릭하여 활성화해 둔 바로 그 대화방에서 이동 없이 즉시 Enter 오픈!
+        # 2번째 방부터: Down 방향키(↓)를 눌러 다음 대화방으로 한 칸씩 이동!
         if idx > 1:
             log(f"[{idx}번째 전송 대상] ↓ 아래 방향키로 다음 대화방 선택 이동...", "info")
             win32_press_key(VK_DOWN, 0.05)
