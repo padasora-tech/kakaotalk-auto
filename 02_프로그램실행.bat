@@ -22,5 +22,5 @@ if exist ".venv\Scripts\pythonw.exe" (
 )
 
 timeout /t 1 > nul
-start chrome http://127.0.0.1:15874
+start chrome http://127.0.0.1:15899
 exit

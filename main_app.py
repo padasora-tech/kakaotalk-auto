@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 마우스 위치 캡처 더블클릭 시작 & Down 방향키 무제한 연속 발송 엔진 v69.0
+main_app.py - 마우스 위치 캡처 더블클릭 시작 & Down 방향키 무제한 연속 발송 엔진 [신규 포트 15899] v70.0
+- 포트 15899 (구버전 프로세스 충돌 완전 회피)
 - 초록 버튼 누른 후 3초 동안 시작할 방(김광훈 고객님) 위에 마우스를 올려두면,
 - 1번째 방: 해당 마우스 좌표를 읽어와서 win32_double_click 으로 100% 대화창 짠 오픈! ➔ 전송 ➔ ESC 닫기
 - 2번째 방부터: 포커스가 확정되었으므로 Down 방향키(↓) 1회 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
-- 15874 / 15888 / 15890 모든 포트 완벽 지원
 """
 import os
 import sys
@@ -427,7 +427,8 @@ def start_server_on_port(port):
         pass
 
 def main():
-    ports = [15874, 15888, 15890]
+    # 15899 포트를 최우선 메인 포트로 실행
+    ports = [15899, 15874, 15888, 15890]
     for p in ports:
         t = threading.Thread(target=start_server_on_port, args=(p,), daemon=True)
         t.start()
