@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 8월 27일 13:19 성공 원본 + 물리적 마우스 더블클릭 대화창 오픈 + [텍스트 ➔ 사진] 콤보 발송 최종본 v63.0
-- 마우스 커서가 대화방 위치로 이동 후 정확한 물리적 더블클릭(따닥!)으로 대화창 100% 오픈
-- [텍스트 ➔ 오늘자 카드뉴스 사진] 순차 전송 후 ESC 대화창 닫기
-- 15874 / 15888 / 15890 트리플 포트 지원
+main_app.py - 카카오톡 대화방 완벽 활성화 & 물리적 더블클릭 오픈 & [텍스트 ➔ 사진] 순차 발송 최종본 v64.0
+- 마우스 이동 ➔ 1회 클릭으로 창 활성화 ➔ 정밀 더블클릭(따닥!) + Enter로 대화방 100% 오픈
+- [텍스트 ➔ 사진] 순차 전송 ➔ ESC 닫기 ➔ 바로 아래 채팅방으로 이동
+- 15874 / 15888 / 15890 모든 포트 지원
 """
 import os
 import sys
@@ -52,29 +52,34 @@ def win32_move_mouse_smooth(target_x, target_y, steps=10):
     except Exception:
         pass
 
-def win32_double_click_open(x, y):
+def win32_activate_and_double_click_open(x, y):
     """
-    마우스 커서를 대화방 위에 두고 물리적인 좌클릭 2회(더블클릭 따닥!)를 발생시켜
-    대화방 창을 100% 확실하게 띄웁니다.
+    [1단계] 카카오톡 창 활성화 클릭 ➔ [2단계] 정밀 물리적 더블클릭(따닥!) ➔ [3단계] 보조 Enter
+    비활성 상태인 카카오톡 창도 100% 무조건 대화방 팝업창을 엽니다.
     """
+    # 1. 마우스 위치 고정
     user32.SetCursorPos(x, y)
     time.sleep(0.05)
-    
-    # 1번째 클릭
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.04)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    
-    # 더블클릭 간격 (윈도우 표준 더블클릭 딜레이 60ms)
-    time.sleep(0.06)
-    
-    # 2번째 클릭 (더블클릭 완성)
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.04)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.08)
 
-    # 혹시 모를 보조 Enter 키 (더블클릭 지원 보강)
+    # 2. [1단계: 창 활성화 및 해당 대화방 선택 클릭]
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.04)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    time.sleep(0.15)  # 창 활성화 대기
+
+    # 3. [2단계: 확실한 물리적 더블클릭 따닥!]
+    # 첫번째 탭
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.04)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    time.sleep(0.06)  # 더블클릭 인터벌 (60ms)
+    # 두번째 탭
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.04)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    time.sleep(0.1)
+
+    # 4. [3단계: 보조 Enter 키 (더블클릭 지원 100% 보장)]
     pyautogui.press('enter')
 
 def win32_scroll_down(amount=-180):
@@ -195,7 +200,7 @@ def send_message_to_opened_room(msg_text="", image_path=None):
     """
     열린 대화창에 [텍스트 ➔ 사진]을 순서대로 전송하고 ESC로 대화창을 닫습니다.
     """
-    time.sleep(0.75)  # 대화창 렌더링 대기
+    time.sleep(0.8)  # 대화창 렌더링 대기
 
     # 1. 텍스트 전송
     if msg_text and msg_text.strip():
@@ -204,7 +209,7 @@ def send_message_to_opened_room(msg_text="", image_path=None):
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.25)
         pyautogui.press('enter')  # 텍스트 전송
-        time.sleep(0.35)
+        time.sleep(0.4)
 
     # 2. 사진(카드뉴스) 전송
     if image_path and os.path.exists(image_path):
@@ -217,7 +222,7 @@ def send_message_to_opened_room(msg_text="", image_path=None):
 
     # 3. 대화방 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
     pyautogui.press('esc')
-    time.sleep(0.35)
+    time.sleep(0.4)  # 포커스 복귀 대기
     return True, "전송 완료"
 
 def worker_kakao_standalone():
@@ -251,11 +256,11 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 [마우스 물리적 더블클릭 대화창 오픈 & 텍스트+사진 전송]을 시작합니다...", "info")
+    log("🚀 2초 후 1번째 대화방부터 [더블클릭 오픈 ➔ 메시지 전송 ➔ ESC ➔ 다음 방]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
-    # 2560x1600 해상도 분할 화면 기준 좌표 (8월 27일 13:19 성공 원본 좌표)
+    # 2560x1600 해상도 분할 화면 기준 좌표 (1번째 대화방 ~ 순차 간격)
     screen_w, screen_h = pyautogui.size()
     list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
     start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
@@ -282,25 +287,25 @@ def worker_kakao_standalone():
             target_y = start_y + ((idx - 1) * row_gap)
         else:
             target_y = start_y + ((max_visible_rows - 1) * row_gap)
-            win32_move_mouse_smooth(list_x, target_y, steps=8)
+            win32_move_mouse_smooth(list_x, target_y, steps=6)
             win32_scroll_down(-180)
             time.sleep(0.3)
 
-        log(f"[{idx}번째 고객 대화방] 마우스 이동 및 더블클릭(따닥!) 대화창 오픈... (좌표: {list_x}, {target_y})", "info")
+        log(f"[{idx}번째 고객 대화방] 마우스 이동 ➔ 더블클릭 대화창 열기... (좌표: {list_x}, {target_y})", "info")
         
         # 1. 마우스 커서를 눈에 보이게 목표 대화방으로 부드럽게 이동
-        win32_move_mouse_smooth(list_x, target_y, steps=12)
+        win32_move_mouse_smooth(list_x, target_y, steps=10)
         
-        # 2. 물리적 더블클릭(따닥!)으로 대화방 창 100% 오픈
-        win32_double_click_open(list_x, target_y)
+        # 2. 창 활성화 + 물리적 더블클릭(따닥!)으로 대화방 100% 오픈
+        win32_activate_and_double_click_open(list_x, target_y)
 
-        # 3. [텍스트 ➔ 사진] 전송 후 ESC로 닫기
+        # 3. 열린 대화창에 [텍스트 ➔ 사진] 전송 후 ESC 닫기
         ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
 
         if ok:
             success_count += 1
             state["success"] = success_count
-            log(f"  ✉️ [{idx}번째 고객 대화방] 발송 성공 완료!", "success")
+            log(f"  ✉️ [{idx}번째 고객 대화방] 발송 성공 완료! (ESC 닫고 다음 방으로)", "success")
         else:
             state["fail"] += 1
             log(f"  ❌ [{idx}번째 대화방] 전송 오류: {res_msg}", "error")
