@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 텍스트 + 사진 1회성 첨부 순차 전송 v53.0
+main_app.py - 카카오톡 대화방 텍스트 + 사진 1회성 첨부 순차 전송 v54.0
 - 마우스 물리적 순차 더블클릭 방식
-- 사진 + 텍스트 동시 콤보 발송 지원 (Pillow + win32clipboard)
+- [텍스트 ➔ 사진] 순서로 연속 자동 발송 (Pillow + win32clipboard)
 """
 import os
 import sys
@@ -135,20 +135,11 @@ def set_clipboard_image(image_path):
 
 def send_message_to_current_open_room(msg_text="", image_path=None):
     """
-    더블클릭으로 열린 대화창에 [사진 + 텍스트]를 붙여넣고 전송한 뒤 ESC로 닫습니다.
+    더블클릭으로 열린 대화창에 [텍스트 ➔ 사진] 순서로 붙여넣고 전송한 뒤 ESC로 닫습니다.
     """
     time.sleep(0.8)  # 대화창 렌더링 대기
 
-    # 1. 사진(이미지)이 첨부되어 있으면 먼저 사진 전송
-    if image_path and os.path.exists(image_path):
-        if set_clipboard_image(image_path):
-            time.sleep(0.15)
-            pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.4)
-            pyautogui.press('enter')  # 사진 전송
-            time.sleep(0.5)
-
-    # 2. 텍스트 문구가 있으면 텍스트 전송
+    # 1. 텍스트 문구가 있으면 먼저 텍스트 전송
     if msg_text and msg_text.strip():
         set_clipboard_text(msg_text)
         time.sleep(0.1)
@@ -156,6 +147,15 @@ def send_message_to_current_open_room(msg_text="", image_path=None):
         time.sleep(0.3)
         pyautogui.press('enter')  # 텍스트 전송
         time.sleep(0.4)
+
+    # 2. 사진(이미지)이 첨부되어 있으면 그 다음 사진 전송
+    if image_path and os.path.exists(image_path):
+        if set_clipboard_image(image_path):
+            time.sleep(0.15)
+            pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.4)
+            pyautogui.press('enter')  # 사진 전송
+            time.sleep(0.5)
 
     # 3. 대화방 닫기 (ESC)
     pyautogui.press('esc')
@@ -179,7 +179,7 @@ def worker_kakao_standalone():
 
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
     if image_to_send:
-        log("📸 [사진 + 텍스트 콤보 발송] 사진이 첨부되었습니다.", "info")
+        log("📸 [텍스트 ➔ 사진 콤보 발송] 텍스트 발송 후 사진이 연속 발송됩니다.", "info")
     log("💬 카톡에서 원하시는 폴더('기고객님들' 등)를 띄워두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
@@ -300,7 +300,6 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/config":
             self._send_json(load_config())
         elif parsed.path == "/preview_image":
-            # 업로드된 이미지 바이너리 서빙
             if os.path.exists(TEMP_IMAGE_PATH):
                 with open(TEMP_IMAGE_PATH, "rb") as f:
                     img_data = f.read()
@@ -360,7 +359,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 400)
         elif parsed.path == "/api/upload_image":
-            # 이미지 바이너리 저장
             try:
                 raw_bytes = self._read_body()
                 with open(TEMP_IMAGE_PATH, "wb") as f:
@@ -370,7 +368,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 500)
         elif parsed.path == "/api/clear_image":
-            # 첨부된 이미지 삭제
             try:
                 if os.path.exists(TEMP_IMAGE_PATH):
                     os.remove(TEMP_IMAGE_PATH)
