@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 텍스트 + 사진 1회성 첨부 순차 전송 v54.0
-- 마우스 물리적 순차 더블클릭 방식
-- [텍스트 ➔ 사진] 순서로 연속 자동 발송 (Pillow + win32clipboard)
+main_app.py - 카카오톡 대화방 목록 정밀 순차 네비게이션 & [텍스트 ➔ 사진] 자동 발송 v55.0
+- Enter (방 열기) ➔ 텍스트 전송 ➔ 사진 전송 ➔ ESC (방 닫기) ➔ Down 방향키 (다음 방 이동)
+- 100% 무결점 키보드 네비게이션 방식
 """
 import os
 import sys
@@ -133,13 +133,15 @@ def set_clipboard_image(image_path):
         log(f"이미지 클립보드 복사 실패: {e}", "error")
         return False
 
-def send_message_to_current_open_room(msg_text="", image_path=None):
+def send_to_opened_room(msg_text="", image_path=None):
     """
-    더블클릭으로 열린 대화창에 [텍스트 ➔ 사진] 순서로 붙여넣고 전송한 뒤 ESC로 닫습니다.
+    [Enter] 키로 대화창을 열고 ➔ 텍스트/사진 전송 후 ➔ [ESC] 키로 닫아 목록으로 복귀합니다.
     """
-    time.sleep(0.8)  # 대화창 렌더링 대기
+    # 1. Enter 키로 대화방 열기
+    pyautogui.press('enter')
+    time.sleep(0.7)  # 대화방 열리는 시간 대기
 
-    # 1. 텍스트 문구가 있으면 먼저 텍스트 전송
+    # 2. 텍스트 문구 전송 (있을 경우)
     if msg_text and msg_text.strip():
         set_clipboard_text(msg_text)
         time.sleep(0.1)
@@ -148,7 +150,7 @@ def send_message_to_current_open_room(msg_text="", image_path=None):
         pyautogui.press('enter')  # 텍스트 전송
         time.sleep(0.4)
 
-    # 2. 사진(이미지)이 첨부되어 있으면 그 다음 사진 전송
+    # 3. 사진(이미지) 전송 (있을 경우)
     if image_path and os.path.exists(image_path):
         if set_clipboard_image(image_path):
             time.sleep(0.15)
@@ -157,7 +159,7 @@ def send_message_to_current_open_room(msg_text="", image_path=None):
             pyautogui.press('enter')  # 사진 전송
             time.sleep(0.5)
 
-    # 3. 대화방 닫기 (ESC)
+    # 4. 대화창 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
     pyautogui.press('esc')
     time.sleep(0.3)
     return True, "전송 완료"
@@ -179,11 +181,11 @@ def worker_kakao_standalone():
 
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
     if image_to_send:
-        log("📸 [텍스트 ➔ 사진 콤보 발송] 텍스트 발송 후 사진이 연속 발송됩니다.", "info")
-    log("💬 카톡에서 원하시는 폴더('기고객님들' 등)를 띄워두신 후,", "info")
+        log("📸 [텍스트 ➔ 사진 콤보 발송] 사진이 첨부되었습니다.", "info")
+    log("💬 카톡에서 원하시는 폴더('기고객님들' 등)의 [1번째 대화방]을 마우스로 1회 클릭해 두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
-    state["status"] = "카톡 폴더 선택 대기 중..."
+    state["status"] = "1번째 대화방 선택 대기 중..."
 
     # 초록색 버튼(ready) 누를 때까지 대기
     while not state["ready"]:
@@ -193,16 +195,9 @@ def worker_kakao_standalone():
             return
         time.sleep(0.3)
 
-    log("🚀 2초 후 [마우스 물리적 순차 더블클릭] 발송을 시작합니다...", "info")
+    log("🚀 2초 후 [대화방 순차 오픈 및 텍스트+사진 전송]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
-
-    # 2560x1600 해상도 분할 화면 기준 좌표
-    screen_w, screen_h = pyautogui.size()
-    list_x = int(screen_w * 0.605)
-    start_y = int(screen_h * 0.095)  # 152px
-    row_gap = int(screen_h * 0.045)  # 72px
-    max_visible_rows = 11            # 화면에 보이는 방 개수
 
     max_limit = 500
     state["total"] = max_limit
@@ -219,19 +214,14 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # [마우스 순차 더블클릭 위치 계산]
-        if idx <= max_visible_rows:
-            target_y = start_y + ((idx - 1) * row_gap)
-        else:
-            target_y = start_y + ((max_visible_rows - 1) * row_gap)
-            pyautogui.moveTo(list_x, target_y)
-            pyautogui.scroll(-150)
+        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 포커스 이동
+        if idx > 1:
+            pyautogui.press('down')
             time.sleep(0.3)
 
-        log(f"[{idx}번째 고객 대화방] 마우스 더블클릭 진입... (좌표: {list_x}, {target_y})", "info")
-        pyautogui.doubleClick(list_x, target_y)
+        log(f"[{idx}번째 고객 대화방] 진입 및 대화창 열기 (Enter)...", "info")
 
-        ok, res_msg = send_message_to_current_open_room(msg_template, image_to_send)
+        ok, res_msg = send_to_opened_room(msg_template, image_to_send)
 
         if ok:
             success_count += 1
