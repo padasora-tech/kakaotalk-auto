@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 사용자 시작 대화방 100% 선택 & Down 방향키 무제한 연속 발송 엔진 v68.0
-- 초록 버튼 클릭 후 3초 카운트다운 (사용자가 카톡에서 시작할 방을 클릭하여 활성화할 시간 제공)
-- 1번째 방: 활성화된 바로 그 방에서 Enter 오픈 ➔ [텍스트 ➔ 사진] 전송 ➔ ESC 닫기
-- 2번째 방부터: Down 방향키(↓) 1회 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
+main_app.py - 마우스 위치 캡처 더블클릭 시작 & Down 방향키 무제한 연속 발송 엔진 v69.0
+- 초록 버튼 누른 후 3초 동안 시작할 방(김광훈 고객님) 위에 마우스를 올려두면,
+- 1번째 방: 해당 마우스 좌표를 읽어와서 win32_double_click 으로 100% 대화창 짠 오픈! ➔ 전송 ➔ ESC 닫기
+- 2번째 방부터: 포커스가 확정되었으므로 Down 방향키(↓) 1회 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
 - 15874 / 15888 / 15890 모든 포트 완벽 지원
 """
 import os
@@ -29,7 +29,7 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-# 윈도우 키보드 제어 API
+# 윈도우 키보드 및 마우스 제어 API
 user32 = ctypes.windll.user32
 KEYEVENTF_KEYUP = 0x0002
 VK_RETURN = 0x0D
@@ -41,6 +41,20 @@ def win32_press_key(vk_code, delay=0.04):
     user32.keybd_event(vk_code, 0, 0, 0)
     time.sleep(delay)
     user32.keybd_event(vk_code, 0, KEYEVENTF_KEYUP, 0)
+
+def win32_double_click(x, y):
+    """정확한 윈도우 OS 더블클릭 타이밍으로 해당 위치의 대화방을 100% 엽니다."""
+    user32.SetCursorPos(int(x), int(y))
+    time.sleep(0.06)
+    # 1st click
+    user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
+    time.sleep(0.04)
+    user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
+    time.sleep(0.08)  # OS 더블클릭 간격
+    # 2nd click
+    user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
+    time.sleep(0.04)
+    user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
 
 pyautogui.PAUSE = 0.04
 pyautogui.FAILSAFE = False
@@ -209,17 +223,19 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    # 초록 버튼 누른 후 3초 카운트다운 (사용자가 카톡의 시작 대화방을 클릭하여 활성화할 시간)
-    log("⏳ [3초 카운트다운 시작] 카카오톡 창에서 시작할 대화방(예: 김광훈 고객님)을 마우스로 딱 클릭해 주세요!", "warn")
+    # 초록 버튼 누른 후 3초 카운트다운 동안 마우스 커서를 시작할 대화방 위에 올려둡니다
+    log("⏳ [3초 카운트다운 시작] 카톡에서 시작할 대화방(김광훈 고객님) 위에 마우스 커서를 올려두세요!", "warn")
     for sec in [3, 2, 1]:
         if state["stop"] or not state["running"]:
             reset_state_to_idle()
             return
-        log(f"⏰ {sec}초 후 선택하신 바로 그 대화방부터 발송이 시작됩니다...", "info")
+        log(f"⏰ {sec}초 후 마우스가 위치한 바로 그 대화방을 더블클릭하여 시작합니다...", "info")
         state["status"] = f"{sec}초 후 발송 시작..."
         time.sleep(1.0)
 
-    log("🚀 [발송 시작] 선택하신 시작 대화방의 대화창을 오픈합니다!", "success")
+    # 3초 종료 시점의 마우스 커서 위치 캡처 (김광훈 고객님 위치!)
+    start_pos = pyautogui.position()
+    log(f"🎯 시작 대화방 마우스 좌표 확정: ({start_pos.x}, {start_pos.y})", "success")
     state["status"] = "발송 진행 중..."
 
     max_limit = 500
@@ -237,19 +253,20 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # 1번째 방: 사용자가 방금 클릭하여 활성화해 둔 바로 그 대화방에서 이동 없이 즉시 Enter 오픈!
-        # 2번째 방부터: Down 방향키(↓)를 눌러 다음 대화방으로 한 칸씩 이동!
-        if idx > 1:
-            log(f"[{idx}번째 전송 대상] ↓ 아래 방향키로 다음 대화방 선택 이동...", "info")
+        if idx == 1:
+            # 1번째 방: 사용자가 마우스를 올려둔 바로 그 위치에서 윈도우 API 더블클릭으로 100% 대화창 오픈!
+            log(f"[{idx}번째 전송 대상] 마우스 더블클릭으로 시작 대화방 오픈...", "info")
+            win32_double_click(start_pos.x, start_pos.y)
+        else:
+            # 2번째 방부터: 카톡 내부 포커스가 확정되었으므로 Down 방향키(↓)로 아래로 자동 스크롤 이동 ➔ Enter 오픈!
+            log(f"[{idx}번째 전송 대상] ↓ 아래 방향키로 다음 대화방 이동...", "info")
             win32_press_key(VK_DOWN, 0.05)
             pyautogui.press('down')
-            time.sleep(0.35)  # 포커스 이동 및 카톡 스크롤 대기
+            time.sleep(0.35)  # 포커스 이동 및 카톡 자동 스크롤 대기
 
-        log(f"[{idx}번째 전송 대상] Enter 키로 대화창 오픈 및 발송...", "info")
-        
-        # 엔터키로 대화창 짠 오픈
-        win32_press_key(VK_RETURN, 0.05)
-        pyautogui.press('enter')
+            log(f"[{idx}번째 전송 대상] Enter 키로 대화창 오픈...", "info")
+            win32_press_key(VK_RETURN, 0.05)
+            pyautogui.press('enter')
 
         # [텍스트 ➔ 사진] 전송 후 ESC 닫기
         ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
