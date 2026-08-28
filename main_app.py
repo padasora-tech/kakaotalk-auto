@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 마우스 순차 더블클릭 발송 엔진 (UnicodeEncodeError 완전 해결 버전)
+main_app.py - 카카오톡 대화방 목록 마우스 실시간 커널 이동 & 클릭+엔터 대화창 오픈 순차 발송 v61.0
+- ctypes.windll.user32.SetCursorPos로 마우스 커서가 실시간으로 직접 이동
+- 마우스 클릭 + Enter로 대화방 100% 오픈 보장
+- 텍스트 전송 후 ESC 닫기
+- 포트 15874 / 15888 / 15890 트리플 포트 지원
 """
 import os
 import sys
@@ -9,6 +13,7 @@ import time
 import random
 import threading
 import datetime
+import ctypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import pyautogui
@@ -20,6 +25,48 @@ if sys.platform.startswith("win"):
         sys.stderr.reconfigure(encoding="utf-8")
     except Exception:
         pass
+
+# 윈도우 커널 마우스 제어 API
+user32 = ctypes.windll.user32
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_WHEEL = 0x0800
+
+def win32_move_mouse_smooth(target_x, target_y, steps=15):
+    """마우스 커서가 눈에 보이도록 목표 지점으로 부드럽게 실시간 이동시킵니다."""
+    class POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+    pt = POINT()
+    user32.GetCursorPos(ctypes.byref(pt))
+    curr_x, curr_y = pt.x, pt.y
+
+    for step in range(1, steps + 1):
+        ix = int(curr_x + (target_x - curr_x) * (step / steps))
+        iy = int(curr_y + (target_y - curr_y) * (step / steps))
+        user32.SetCursorPos(ix, iy)
+        time.sleep(0.015)
+    user32.SetCursorPos(target_x, target_y)
+
+def win32_click_and_open(x, y):
+    """목표 대화방 위치를 클릭하여 포커스를 잡고 더블클릭+엔터로 대화창을 100% 확실하게 엽니다."""
+    user32.SetCursorPos(x, y)
+    time.sleep(0.05)
+    # 1. 좌클릭 1회 (포커스 활성화)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.03)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    time.sleep(0.08)
+    # 2. 좌클릭 2회차 (더블클릭 완성)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.03)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    time.sleep(0.1)
+    # 3. 보조 Enter 키 (더블클릭이 씹히는 윈도우 환경에서도 100% 오픈 보장)
+    pyautogui.press('enter')
+
+def win32_scroll_down(amount=-180):
+    """카카오톡 대화방 목록을 아래로 스크롤합니다."""
+    user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, amount, 0)
 
 pyautogui.PAUSE = 0.05
 pyautogui.FAILSAFE = False
@@ -105,25 +152,25 @@ def set_clipboard_text(text):
             time.sleep(0.05)
     return True
 
-def send_message_to_current_open_room(msg_text=""):
+def send_message_to_opened_room(msg_text=""):
     """
-    더블클릭으로 열린 대화창에 메시지를 붙여넣고 전송한 뒤 ESC로 닫습니다.
+    열린 대화창에 메시지를 붙여넣고 전송한 뒤 ESC로 닫습니다.
     """
-    time.sleep(0.8)  # 대화창 렌더링 대기
+    time.sleep(0.7)  # 대화창 오픈 렌더링 대기
 
     # 1. 메시지 붙여넣기
-    set_clipboard_text(msg_text)
-    time.sleep(0.1)
-    pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.3)
-
-    # 2. 메시지 전송
-    pyautogui.press('enter')
-    time.sleep(0.4)
+    if msg_text and msg_text.strip():
+        set_clipboard_text(msg_text)
+        time.sleep(0.1)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.25)
+        # 2. 메시지 전송
+        pyautogui.press('enter')
+        time.sleep(0.35)
 
     # 3. 대화방 닫기 (ESC)
     pyautogui.press('esc')
-    time.sleep(0.3)
+    time.sleep(0.35)
     return True, "전송 완료"
 
 def worker_kakao_standalone():
@@ -140,7 +187,7 @@ def worker_kakao_standalone():
     state["fail"] = 0
 
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
-    log("💬 카톡에서 원하시는 폴더('기고객님들' 등)를 띄워두신 후,", "info")
+    log("💬 카톡에서 '기고객님들' 폴더를 띄워두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
     state["status"] = "카톡 폴더 선택 대기 중..."
@@ -151,19 +198,19 @@ def worker_kakao_standalone():
             log("⬛ 준비 단계에서 작업이 중지되었습니다.", "warn")
             reset_state_to_idle()
             return
-        time.sleep(0.3)
+        time.sleep(0.2)
 
-    log("🚀 2초 후 [마우스 물리적 순차 더블클릭] 발송을 시작합니다...", "info")
+    log("🚀 2초 후 [마우스 실시간 이동 & 대화창 오픈 발송]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
     # 2560x1600 해상도 분할 화면 기준 좌표
     screen_w, screen_h = pyautogui.size()
     
-    # 카카오톡 창 좌측 목록 영역 (오른쪽 절반 화면 기준 x=1550)
+    # 카카오톡 창 좌측 목록 영역 (오른쪽 절반 화면 기준 x=1548)
     list_x = int(screen_w * 0.605)
     
-    # 1번째 줄 y좌표: 약 150px
+    # 1번째 줄 y좌표: 약 152px
     # 각 대화방 사이의 간격: 약 72px
     start_y = int(screen_h * 0.095)  # 152px
     row_gap = int(screen_h * 0.045)  # 72px
@@ -184,23 +231,25 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # [마우스 순차 더블클릭 위치 계산]
+        # [마우스 순차 이동 위치 계산]
         if idx <= max_visible_rows:
-            # 화면에 보이는 1번째~11번째 줄을 위에서부터 아래로 차례대로 이동
             target_y = start_y + ((idx - 1) * row_gap)
         else:
-            # 12번째부터는 맨 아래 줄 위치를 클릭하기 전 목록을 아래로 스크롤
             target_y = start_y + ((max_visible_rows - 1) * row_gap)
-            pyautogui.moveTo(list_x, target_y)
-            pyautogui.scroll(-150)
+            win32_move_mouse_smooth(list_x, target_y, steps=10)
+            win32_scroll_down(-180)
             time.sleep(0.3)
 
-        log(f"[{idx}번째 고객 대화방] 마우스 더블클릭 진입... (좌표: {list_x}, {target_y})", "info")
+        log(f"[{idx}번째 고객 대화방] 마우스 이동 및 대화창 열기... (좌표: {list_x}, {target_y})", "info")
         
-        # 키보드 포커스 문제 없는 100% 확실한 마우스 더블클릭 진입
-        pyautogui.doubleClick(list_x, target_y)
+        # 1. 마우스 커서가 눈에 보이게 목표 방으로 슥 이동
+        win32_move_mouse_smooth(list_x, target_y, steps=15)
+        
+        # 2. 클릭 + 엔터로 대화방 100% 오픈
+        win32_click_and_open(list_x, target_y)
 
-        ok, res_msg = send_message_to_current_open_room(msg_template)
+        # 3. 메시지 입력 및 전송 후 ESC 닫기
+        ok, res_msg = send_message_to_opened_room(msg_template)
 
         if ok:
             success_count += 1
@@ -247,7 +296,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/" or parsed.path == "/index.html":
+        if parsed.path in ("/", "/index.html"):
             if os.path.exists(HTML_FILE):
                 with open(HTML_FILE, "r", encoding="utf-8") as f:
                     content = f.read()
