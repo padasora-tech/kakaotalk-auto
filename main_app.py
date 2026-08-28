@@ -1,8 +1,6 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 마우스 절대좌표 더블클릭 순차 전송 v51.0
-- 화살표 키 포커스 유실 문제 100% 원천 해결
-- 마우스로 1번째 줄(더블클릭) -> 전송 -> 2번째 줄(더블클릭) -> 전송 -> 3번째 줄(더블클릭)...
+main_app.py - 카카오톡 대화방 목록 마우스 순차 더블클릭 발송 엔진 (UnicodeEncodeError 완전 해결 버전)
 """
 import os
 import sys
@@ -15,6 +13,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import pyautogui
 import pyperclip
+
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 pyautogui.PAUSE = 0.05
 pyautogui.FAILSAFE = False
@@ -67,7 +72,10 @@ def save_config(cfg):
 def log(msg, level="info"):
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     entry = {"time": ts, "msg": str(msg), "level": level}
-    print(f"[{ts}] {msg}")
+    try:
+        print(f"[{ts}] {msg}")
+    except Exception:
+        pass
     state["logs"].append(entry)
     if len(state["logs"]) > 300:
         state["logs"].pop(0)
@@ -97,7 +105,7 @@ def set_clipboard_text(text):
             time.sleep(0.05)
     return True
 
-def send_message_to_current_open_room(msg_text):
+def send_message_to_current_open_room(msg_text=""):
     """
     더블클릭으로 열린 대화창에 메시지를 붙여넣고 전송한 뒤 ESC로 닫습니다.
     """
@@ -197,7 +205,7 @@ def worker_kakao_standalone():
         if ok:
             success_count += 1
             state["success"] = success_count
-            log(f"  ✉️  [{idx}번째 고객 대화방] 발송 성공 완료!", "success")
+            log(f"  ✉️ [{idx}번째 고객 대화방] 발송 성공 완료!", "success")
         else:
             state["fail"] += 1
             log(f"  ❌ [{idx}번째 대화방] 전송 오류: {res_msg}", "error")
@@ -220,6 +228,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
 
@@ -228,6 +237,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
 
@@ -280,6 +290,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
         elif parsed.path == "/ready":
             state["ready"] = True
+            if not state["running"]:
+                t = threading.Thread(target=worker_kakao_standalone, daemon=True)
+                t.start()
             self._send_json({"ok": True})
         elif parsed.path == "/pause":
             try:
@@ -307,16 +320,27 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+def start_server_on_port(port):
+    try:
+        server = HTTPServer(("127.0.0.1", port), Handler)
+        server.serve_forever()
+    except Exception:
+        pass
+
 def main():
-    PORT = 15874
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
-    t = threading.Thread(target=server.serve_forever, daemon=True)
-    t.start()
+    ports = [15874, 15888, 15890]
+    for p in ports:
+        t = threading.Thread(target=start_server_on_port, args=(p,), daemon=True)
+        t.start()
+        try:
+            print(f"[Kakao Customer Manager] Listening on http://127.0.0.1:{p}")
+        except Exception:
+            pass
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        server.shutdown()
+        pass
 
 if __name__ == "__main__":
     main()
