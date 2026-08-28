@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 사용자 선택 시작점 기준 & Down 방향키 무제한 순차 발송 엔진 [규칙 정립 최종본] v66.0
-- 규칙: 사용자가 카톡 목록에서 원하는 시작 대화방을 마우스로 1회 클릭 ➔ 초록버튼 클릭
+main_app.py - 사용자 현재 선택 대화방 기준 100% 시작 & Down 방향키 순차 발송 엔진 v67.0
+- 시작 시 마우스를 맨 위로 이동하지 않고, 사용자가 선택해 둔 바로 그 방에서 즉시 Enter 오픈!
 - 1번째 방: Enter 오픈 ➔ [텍스트 ➔ 사진] 전송 ➔ ESC 닫기
-- 다음 방들: Down 방향키(↓) 한 칸 이동(자동 스크롤) ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
-- 15874 / 15888 / 15890 모든 포트 완벽 지원
+- 2번째 방부터: Down 방향키(↓) 1회 이동 ➔ Enter 오픈 ➔ 전송 ➔ ESC 닫기 무제한 연속 발송
+- 15874 / 15888 / 15890 모든 포트 지원
 """
 import os
 import sys
@@ -36,7 +36,7 @@ VK_RETURN = 0x0D
 VK_DOWN = 0x28
 VK_ESCAPE = 0x1B
 
-def win32_press_key(vk_code, delay=0.05):
+def win32_press_key(vk_code, delay=0.04):
     """지정된 가상 키를 정확하게 누르고 뗍니다."""
     user32.keybd_event(vk_code, 0, 0, 0)
     time.sleep(delay)
@@ -197,7 +197,7 @@ def worker_kakao_standalone():
     log("🔌 PC 카카오톡 대화방 목록 연동 모드 대기 중...", "success")
     if image_to_send:
         log("📸 [텍스트 ➔ 사진 콤보 발송] 첨부된 카드뉴스 사진이 준비되었습니다.", "info")
-    log("💬 [규칙] 카톡에서 발송을 시작할 대화방을 마우스로 '딱 한 번 클릭'하여 선택해 두신 후,", "info")
+    log("💬 카톡에서 시작할 대화방을 마우스로 '딱 한 번 클릭'하여 선택해 두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
     state["status"] = "시작 대화방 선택 대기 중..."
@@ -210,7 +210,7 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 선택하신 시작 대화방부터 [엔터 오픈 ➔ 전송 ➔ ESC 닫기 ➔ ↓방향키 순차 이동]을 시작합니다...", "info")
+    log("🚀 2초 후 [선택하신 바로 그 대화방]부터 발송을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
@@ -229,16 +229,17 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 한 칸씩 이동 (카톡 자체 자동 스크롤)
+        # 1번째 방은 사용자가 이미 마우스로 선택해 둔 바로 그 방이므로 이동 없이 즉시 Enter 오픈!
+        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 한 칸씩 이동!
         if idx > 1:
-            log(f"[{idx}번째 고객 대화방] ↓ 아래 방향키로 다음 대화방 이동...", "info")
+            log(f"[{idx}번째 전송 대상] ↓ 아래 방향키로 다음 대화방 선택 이동...", "info")
             win32_press_key(VK_DOWN, 0.05)
             pyautogui.press('down')
             time.sleep(0.35)  # 포커스 이동 및 카톡 스크롤 대기
 
-        log(f"[{idx}번째 고객 대화방] Enter 키로 대화창 열기...", "info")
+        log(f"[{idx}번째 전송 대상] Enter 키로 대화창 오픈 및 발송...", "info")
         
-        # 엔터키로 대화창 오픈
+        # 엔터키로 대화창 짠 오픈
         win32_press_key(VK_RETURN, 0.05)
         pyautogui.press('enter')
 
@@ -248,7 +249,7 @@ def worker_kakao_standalone():
         if ok:
             success_count += 1
             state["success"] = success_count
-            log(f"  ✉️ [{idx}번째 고객 대화방] 발송 성공 완료! (ESC 닫고 다음 방으로)", "success")
+            log(f"  ✉️ [{idx}번째 전송 대상] 발송 성공 완료! (ESC 닫고 다음 방으로)", "success")
         else:
             state["fail"] += 1
             log(f"  ❌ [{idx}번째 대화방] 전송 오류: {res_msg}", "error")
