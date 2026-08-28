@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 목록 정밀 순차 네비게이션 & [텍스트 ➔ 사진] 자동 발송 v56.0
-- 마우스 이동 100% 제거! 순수 키보드 단축키 방식 (Enter ➔ 텍스트 ➔ 사진 ➔ ESC ➔ Down)
-- 포트 15890 / 15874 / 15888 지원
+main_app.py - 카카오톡 대화방 마우스 실시간 이동 & 순차 더블클릭 발송 v57.0
+- 마우스 커서가 각 대화방으로 직접 이동(moveTo)하여 더블클릭(doubleClick)으로 대화방 오픈
+- [텍스트 ➔ 사진] 순서로 전송 후 ESC로 닫기
+- 허위 보고 없는 정밀 딜레이 및 포트 15890/15874/15888 지원
 """
 import os
 import sys
@@ -133,16 +134,13 @@ def set_clipboard_image(image_path):
         log(f"이미지 클립보드 복사 실패: {e}", "error")
         return False
 
-def send_to_opened_room(msg_text="", image_path=None):
+def send_message_to_opened_room(msg_text="", image_path=None):
     """
-    [Enter] 키로 대화창을 열고 ➔ [텍스트 ➔ 사진] 전송 후 ➔ [ESC] 키로 닫아 목록으로 복귀합니다.
-    (마우스는 일절 건드리지 않고 순수 키보드로만 작동합니다)
+    더블클릭으로 열린 대화창에 [텍스트 ➔ 사진]을 전송하고 ESC로 닫습니다.
     """
-    # 1. Enter 키로 대화방 열기
-    pyautogui.press('enter')
-    time.sleep(0.7)  # 대화창 열리는 시간 대기
+    time.sleep(0.7)  # 대화창 렌더링 대기
 
-    # 2. 텍스트 문구 전송 (있을 경우)
+    # 1. 텍스트 문구 전송
     if msg_text and msg_text.strip():
         set_clipboard_text(msg_text)
         time.sleep(0.1)
@@ -151,7 +149,7 @@ def send_to_opened_room(msg_text="", image_path=None):
         pyautogui.press('enter')  # 텍스트 전송
         time.sleep(0.4)
 
-    # 3. 사진(이미지) 전송 (있을 경우)
+    # 2. 사진(이미지) 전송
     if image_path and os.path.exists(image_path):
         if set_clipboard_image(image_path):
             time.sleep(0.15)
@@ -160,9 +158,9 @@ def send_to_opened_room(msg_text="", image_path=None):
             pyautogui.press('enter')  # 사진 전송
             time.sleep(0.5)
 
-    # 4. 대화창 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
+    # 3. 대화창 닫기 (ESC) -> 대화방 목록으로 복귀
     pyautogui.press('esc')
-    time.sleep(0.3)
+    time.sleep(0.35)
     return True, "전송 완료"
 
 def worker_kakao_standalone():
@@ -180,13 +178,13 @@ def worker_kakao_standalone():
     state["success"] = 0
     state["fail"] = 0
 
-    log("🔌 PC 카카오톡 대화방 목록 순차 발송 준비 완료", "success")
+    log("🔌 PC 카카오톡 대화방 목록 마우스 실시간 순차 발송 모드 대기 중...", "success")
     if image_to_send:
         log("📸 [텍스트 ➔ 사진 콤보 발송] 사진이 첨부되었습니다.", "info")
-    log("💬 카톡의 [기고객님들] 폴더에서 [맨 위 1번째 대화방]을 마우스로 '딱 한 번' 클릭해 두신 후,", "info")
+    log("💬 카톡 우측 화면의 [기고객님들] 폴더를 띄워두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
-    state["status"] = "1번째 대화방 선택 대기 중..."
+    state["status"] = "카톡 폴더 선택 대기 중..."
 
     # 초록색 버튼(ready) 누를 때까지 대기
     while not state["ready"]:
@@ -196,9 +194,16 @@ def worker_kakao_standalone():
             return
         time.sleep(0.3)
 
-    log("🚀 2초 후 [대화방 순차 오픈 및 텍스트+사진 전송]을 시작합니다...", "info")
+    log("🚀 2초 후 [마우스 실시간 이동 & 더블클릭 순차 발송]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
+
+    # 2560x1600 해상도 분할 화면 기준 좌표
+    screen_w, screen_h = pyautogui.size()
+    list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
+    start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
+    row_gap = int(screen_h * 0.045)   # 약 72px (각 대화방 사이의 간격)
+    max_visible_rows = 11             # 화면에 보이는 방 개수
 
     max_limit = 500
     state["total"] = max_limit
@@ -215,19 +220,32 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 한 칸씩 이동
-        if idx > 1:
-            pyautogui.press('down')
-            time.sleep(0.3)
+        # [마우스 순차 이동 위치 계산]
+        if idx <= max_visible_rows:
+            target_y = start_y + ((idx - 1) * row_gap)
+        else:
+            target_y = start_y + ((max_visible_rows - 1) * row_gap)
+            pyautogui.moveTo(list_x, target_y, duration=0.2)
+            pyautogui.scroll(-200)
+            time.sleep(0.35)
 
-        log(f"[{idx}번째 고객 대화방] 진입 및 대화창 열기 (Enter)...", "info")
+        log(f"[{idx}번째 고객 대화방] 마우스 이동 중 ➔ 좌표: ({list_x}, {target_y})", "info")
+        
+        # 1. 마우스가 눈으로 보이게 부드럽게 이동
+        pyautogui.moveTo(list_x, target_y, duration=0.35)
+        time.sleep(0.1)
 
-        ok, res_msg = send_to_opened_room(msg_template, image_to_send)
+        # 2. 마우스 더블클릭으로 대화방 오픈
+        log(f"[{idx}번째 고객 대화방] 더블클릭으로 대화창 열기...", "info")
+        pyautogui.doubleClick(list_x, target_y)
+
+        # 3. 대화창에 텍스트 ➔ 사진 발송 후 ESC로 닫기
+        ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
 
         if ok:
             success_count += 1
             state["success"] = success_count
-            log(f"  ✉️ [{idx}번째 고객 대화방] 발송 성공 완료!", "success")
+            log(f"  ✉️ [{idx}번째 고객 대화방] 실제 발송 성공 완료!", "success")
         else:
             state["fail"] += 1
             log(f"  ❌ [{idx}번째 대화방] 전송 오류: {res_msg}", "error")
