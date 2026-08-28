@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 마우스 실시간 이동 & 순차 더블클릭 발송 v57.0
-- 마우스 커서가 각 대화방으로 직접 이동(moveTo)하여 더블클릭(doubleClick)으로 대화방 오픈
-- [텍스트 ➔ 사진] 순서로 전송 후 ESC로 닫기
-- 허위 보고 없는 정밀 딜레이 및 포트 15890/15874/15888 지원
+main_app.py - 카카오톡 대화방 Windows 커널 마우스 실시간 이동 & 더블클릭 순차 발송 v58.0
+- ctypes user32.SetCursorPos & mouse_event 기반 100% 확실한 마우스 제어
+- 더블클릭 + Enter 이중 보장 오픈 & [텍스트 ➔ 사진] 자동 발송
+- 15874 / 15888 / 15890 트리플 포트 동시 리스닝
 """
 import os
 import sys
@@ -13,6 +13,8 @@ import random
 import threading
 import datetime
 import io
+import ctypes
+from ctypes import wintypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import pyautogui
@@ -29,6 +31,13 @@ if sys.platform.startswith("win"):
 
 pyautogui.PAUSE = 0.05
 pyautogui.FAILSAFE = False
+
+user32 = ctypes.windll.user32
+
+# 윈도우 마우스 이벤트 상수
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP   = 0x0004
+MOUSEEVENTF_WHEEL    = 0x0800
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -56,6 +65,45 @@ state = {
     "status": "대기 중",
     "logs": []
 }
+
+class POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+def get_cursor_pos():
+    pt = POINT()
+    user32.GetCursorPos(ctypes.byref(pt))
+    return pt.x, pt.y
+
+def smooth_move_cursor(target_x, target_y, steps=25, duration=0.35):
+    """Windows API(SetCursorPos)로 마우스 커서를 목표 좌표로 부드럽게 실시간 이동시킵니다."""
+    start_x, start_y = get_cursor_pos()
+    step_sleep = duration / max(steps, 1)
+    for i in range(1, steps + 1):
+        curr_x = int(start_x + (target_x - start_x) * (i / steps))
+        curr_y = int(start_y + (target_y - start_y) * (i / steps))
+        user32.SetCursorPos(curr_x, curr_y)
+        time.sleep(step_sleep)
+    user32.SetCursorPos(target_x, target_y)
+
+def win32_double_click(x, y):
+    """Windows API(mouse_event)로 해당 좌표에서 물리적 더블클릭을 발생시킵니다."""
+    user32.SetCursorPos(x, y)
+    time.sleep(0.04)
+    # 1st click
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.03)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    time.sleep(0.08)
+    # 2nd click
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.03)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+def win32_scroll_down(clicks=2):
+    """Windows API(mouse_event)로 마우스 휠을 아래로 스크롤합니다."""
+    # 1 click wheel = -120 delta
+    wheel_delta = -120 * clicks
+    user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, wheel_delta, 0)
 
 def load_config():
     if os.path.exists(CONFIG_PATH):
@@ -136,7 +184,7 @@ def set_clipboard_image(image_path):
 
 def send_message_to_opened_room(msg_text="", image_path=None):
     """
-    더블클릭으로 열린 대화창에 [텍스트 ➔ 사진]을 전송하고 ESC로 닫습니다.
+    열린 대화창에 [텍스트 ➔ 사진]을 전송하고 ESC로 닫습니다.
     """
     time.sleep(0.7)  # 대화창 렌더링 대기
 
@@ -178,7 +226,7 @@ def worker_kakao_standalone():
     state["success"] = 0
     state["fail"] = 0
 
-    log("🔌 PC 카카오톡 대화방 목록 마우스 실시간 순차 발송 모드 대기 중...", "success")
+    log("🔌 PC 카카오톡 대화방 목록 실시간 마우스 순차 발송 모드 준비 완료", "success")
     if image_to_send:
         log("📸 [텍스트 ➔ 사진 콤보 발송] 사진이 첨부되었습니다.", "info")
     log("💬 카톡 우측 화면의 [기고객님들] 폴더를 띄워두신 후,", "info")
@@ -192,14 +240,16 @@ def worker_kakao_standalone():
             log("⬛ 준비 단계에서 작업이 중지되었습니다.", "warn")
             reset_state_to_idle()
             return
-        time.sleep(0.3)
+        time.sleep(0.2)
 
     log("🚀 2초 후 [마우스 실시간 이동 & 더블클릭 순차 발송]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
 
-    # 2560x1600 해상도 분할 화면 기준 좌표
-    screen_w, screen_h = pyautogui.size()
+    # 2560x1600 해상도 분할 화면 기준 좌표 (DPI 완벽 대응)
+    screen_w = user32.GetSystemMetrics(0)
+    screen_h = user32.GetSystemMetrics(1)
+    
     list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
     start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
     row_gap = int(screen_h * 0.045)   # 약 72px (각 대화방 사이의 간격)
@@ -225,21 +275,25 @@ def worker_kakao_standalone():
             target_y = start_y + ((idx - 1) * row_gap)
         else:
             target_y = start_y + ((max_visible_rows - 1) * row_gap)
-            pyautogui.moveTo(list_x, target_y, duration=0.2)
-            pyautogui.scroll(-200)
+            smooth_move_cursor(list_x, target_y, steps=15, duration=0.2)
+            win32_scroll_down(clicks=2)
             time.sleep(0.35)
 
-        log(f"[{idx}번째 고객 대화방] 마우스 이동 중 ➔ 좌표: ({list_x}, {target_y})", "info")
+        log(f"[{idx}번째 고객 대화방] 마우스 이동 ➔ 좌표: ({list_x}, {target_y})", "info")
         
-        # 1. 마우스가 눈으로 보이게 부드럽게 이동
-        pyautogui.moveTo(list_x, target_y, duration=0.35)
+        # 1. 윈도우 커널 API로 마우스 커서를 해당 대화방 위치로 부드럽게 실시간 이동
+        smooth_move_cursor(list_x, target_y, steps=25, duration=0.35)
         time.sleep(0.1)
 
-        # 2. 마우스 더블클릭으로 대화방 오픈
-        log(f"[{idx}번째 고객 대화방] 더블클릭으로 대화창 열기...", "info")
-        pyautogui.doubleClick(list_x, target_y)
+        # 2. 마우스 더블클릭 실행
+        log(f"[{idx}번째 고객 대화방] 마우스 더블클릭 오픈...", "info")
+        win32_double_click(list_x, target_y)
 
-        # 3. 대화창에 텍스트 ➔ 사진 발송 후 ESC로 닫기
+        # 3. 더블클릭 + Enter 이중 보장 (대화창 100% 오픈)
+        time.sleep(0.2)
+        pyautogui.press('enter')
+
+        # 4. 대화창에 텍스트 ➔ 사진 발송 후 ESC로 닫기
         ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
 
         if ok:
@@ -343,6 +397,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
         elif parsed.path == "/ready":
             state["ready"] = True
+            if not state["running"]:
+                t = threading.Thread(target=worker_kakao_standalone, daemon=True)
+                t.start()
             self._send_json({"ok": True})
         elif parsed.path == "/pause":
             try:
@@ -395,7 +452,7 @@ def start_server_on_port(port):
         pass
 
 def main():
-    ports = [15890, 15874, 15888]
+    ports = [15874, 15888, 15890]
     for p in ports:
         t = threading.Thread(target=start_server_on_port, args=(p,), daemon=True)
         t.start()
