@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-main_app.py - 카카오톡 대화방 Windows 커널 마우스 실시간 이동 & 더블클릭 순차 발송 v58.0
-- ctypes user32.SetCursorPos & mouse_event 기반 100% 확실한 마우스 제어
-- 더블클릭 + Enter 이중 보장 오픈 & [텍스트 ➔ 사진] 자동 발송
-- 15874 / 15888 / 15890 트리플 포트 동시 리스닝
+main_app.py - 카카오톡 대화방 목록 정밀 방향키(↓) 순차 네비게이션 & [텍스트 ➔ 사진] 자동 발송 v59.0
+- 1번째 방 클릭 ➔ Enter 오픈 ➔ 텍스트 전송 ➔ 사진 전송 ➔ ESC 닫기 (0.5초 대기)
+- Down 방향키(↓) 한 칸 이동 (0.4초 대기) ➔ Enter 오픈 반복
+- 포트 15874 / 15888 / 15890 트리플 포트 완벽 지원
 """
 import os
 import sys
@@ -13,8 +13,6 @@ import random
 import threading
 import datetime
 import io
-import ctypes
-from ctypes import wintypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import pyautogui
@@ -31,13 +29,6 @@ if sys.platform.startswith("win"):
 
 pyautogui.PAUSE = 0.05
 pyautogui.FAILSAFE = False
-
-user32 = ctypes.windll.user32
-
-# 윈도우 마우스 이벤트 상수
-MOUSEEVENTF_LEFTDOWN = 0x0002
-MOUSEEVENTF_LEFTUP   = 0x0004
-MOUSEEVENTF_WHEEL    = 0x0800
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -65,45 +56,6 @@ state = {
     "status": "대기 중",
     "logs": []
 }
-
-class POINT(ctypes.Structure):
-    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-
-def get_cursor_pos():
-    pt = POINT()
-    user32.GetCursorPos(ctypes.byref(pt))
-    return pt.x, pt.y
-
-def smooth_move_cursor(target_x, target_y, steps=25, duration=0.35):
-    """Windows API(SetCursorPos)로 마우스 커서를 목표 좌표로 부드럽게 실시간 이동시킵니다."""
-    start_x, start_y = get_cursor_pos()
-    step_sleep = duration / max(steps, 1)
-    for i in range(1, steps + 1):
-        curr_x = int(start_x + (target_x - start_x) * (i / steps))
-        curr_y = int(start_y + (target_y - start_y) * (i / steps))
-        user32.SetCursorPos(curr_x, curr_y)
-        time.sleep(step_sleep)
-    user32.SetCursorPos(target_x, target_y)
-
-def win32_double_click(x, y):
-    """Windows API(mouse_event)로 해당 좌표에서 물리적 더블클릭을 발생시킵니다."""
-    user32.SetCursorPos(x, y)
-    time.sleep(0.04)
-    # 1st click
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.03)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-    time.sleep(0.08)
-    # 2nd click
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.03)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-
-def win32_scroll_down(clicks=2):
-    """Windows API(mouse_event)로 마우스 휠을 아래로 스크롤합니다."""
-    # 1 click wheel = -120 delta
-    wheel_delta = -120 * clicks
-    user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, wheel_delta, 0)
 
 def load_config():
     if os.path.exists(CONFIG_PATH):
@@ -182,33 +134,35 @@ def set_clipboard_image(image_path):
         log(f"이미지 클립보드 복사 실패: {e}", "error")
         return False
 
-def send_message_to_opened_room(msg_text="", image_path=None):
+def send_to_opened_room(msg_text="", image_path=None):
     """
-    열린 대화창에 [텍스트 ➔ 사진]을 전송하고 ESC로 닫습니다.
+    [Enter]로 대화방 열기 ➔ [텍스트 ➔ 사진] 전송 ➔ [ESC]로 닫고 목록으로 복귀
     """
+    # 1. Enter 키로 대화창 열기
+    pyautogui.press('enter')
     time.sleep(0.7)  # 대화창 렌더링 대기
 
-    # 1. 텍스트 문구 전송
+    # 2. 텍스트 문구 전송
     if msg_text and msg_text.strip():
         set_clipboard_text(msg_text)
         time.sleep(0.1)
         pyautogui.hotkey('ctrl', 'v')
-        time.sleep(0.3)
+        time.sleep(0.25)
         pyautogui.press('enter')  # 텍스트 전송
-        time.sleep(0.4)
+        time.sleep(0.35)
 
-    # 2. 사진(이미지) 전송
+    # 3. 사진(이미지) 전송
     if image_path and os.path.exists(image_path):
         if set_clipboard_image(image_path):
             time.sleep(0.15)
             pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.4)
+            time.sleep(0.35)
             pyautogui.press('enter')  # 사진 전송
-            time.sleep(0.5)
+            time.sleep(0.45)
 
-    # 3. 대화창 닫기 (ESC) -> 대화방 목록으로 복귀
+    # 4. 대화창 닫기 (ESC) -> 대화방 목록으로 포커스 복귀
     pyautogui.press('esc')
-    time.sleep(0.35)
+    time.sleep(0.5)  # 목록 포커스 복귀 안전 대기
     return True, "전송 완료"
 
 def worker_kakao_standalone():
@@ -226,13 +180,13 @@ def worker_kakao_standalone():
     state["success"] = 0
     state["fail"] = 0
 
-    log("🔌 PC 카카오톡 대화방 목록 실시간 마우스 순차 발송 모드 준비 완료", "success")
+    log("🔌 PC 카카오톡 대화방 목록 방향키(↓) 순차 발송 준비 완료", "success")
     if image_to_send:
         log("📸 [텍스트 ➔ 사진 콤보 발송] 사진이 첨부되었습니다.", "info")
-    log("💬 카톡 우측 화면의 [기고객님들] 폴더를 띄워두신 후,", "info")
+    log("💬 카톡 우측의 [기고객님들] 폴더에서 [맨 위 1번째 대화방]을 마우스로 1회 클릭해 두신 후,", "info")
     log("👉 대시보드의 [✅ 카톡 목록 준비 완료! 자동 발송 시작!] 초록색 버튼을 눌러주세요!", "warn")
 
-    state["status"] = "카톡 폴더 선택 대기 중..."
+    state["status"] = "1번째 대화방 선택 대기 중..."
 
     # 초록색 버튼(ready) 누를 때까지 대기
     while not state["ready"]:
@@ -242,18 +196,9 @@ def worker_kakao_standalone():
             return
         time.sleep(0.2)
 
-    log("🚀 2초 후 [마우스 실시간 이동 & 더블클릭 순차 발송]을 시작합니다...", "info")
+    log("🚀 2초 후 [방향키(↓) 순차 이동 및 대화창 오픈 발송]을 시작합니다...", "info")
     state["status"] = "발송 진행 중..."
     time.sleep(2.0)
-
-    # 2560x1600 해상도 분할 화면 기준 좌표 (DPI 완벽 대응)
-    screen_w = user32.GetSystemMetrics(0)
-    screen_h = user32.GetSystemMetrics(1)
-    
-    list_x = int(screen_w * 0.605)    # 약 1548px (대화방 이름 영역)
-    start_y = int(screen_h * 0.095)   # 약 152px (1번째 대화방 Y좌표)
-    row_gap = int(screen_h * 0.045)   # 약 72px (각 대화방 사이의 간격)
-    max_visible_rows = 11             # 화면에 보이는 방 개수
 
     max_limit = 500
     state["total"] = max_limit
@@ -270,36 +215,20 @@ def worker_kakao_standalone():
             if state["stop"] or not state["running"]:
                 break
 
-        # [마우스 순차 이동 위치 계산]
-        if idx <= max_visible_rows:
-            target_y = start_y + ((idx - 1) * row_gap)
-        else:
-            target_y = start_y + ((max_visible_rows - 1) * row_gap)
-            smooth_move_cursor(list_x, target_y, steps=15, duration=0.2)
-            win32_scroll_down(clicks=2)
-            time.sleep(0.35)
+        # 2번째 방부터는 아래 방향키(Down)를 눌러 다음 대화방으로 한 칸씩 이동
+        if idx > 1:
+            log(f"[{idx}번째 고객 대화방] ↓ 아래 방향키로 다음 방 선택 이동...", "info")
+            pyautogui.press('down')
+            time.sleep(0.4)  # 포커스 이동 안전 대기
 
-        log(f"[{idx}번째 고객 대화방] 마우스 이동 ➔ 좌표: ({list_x}, {target_y})", "info")
-        
-        # 1. 윈도우 커널 API로 마우스 커서를 해당 대화방 위치로 부드럽게 실시간 이동
-        smooth_move_cursor(list_x, target_y, steps=25, duration=0.35)
-        time.sleep(0.1)
+        log(f"[{idx}번째 고객 대화방] Enter 키로 대화창 열기 및 전송...", "info")
 
-        # 2. 마우스 더블클릭 실행
-        log(f"[{idx}번째 고객 대화방] 마우스 더블클릭 오픈...", "info")
-        win32_double_click(list_x, target_y)
-
-        # 3. 더블클릭 + Enter 이중 보장 (대화창 100% 오픈)
-        time.sleep(0.2)
-        pyautogui.press('enter')
-
-        # 4. 대화창에 텍스트 ➔ 사진 발송 후 ESC로 닫기
-        ok, res_msg = send_message_to_opened_room(msg_template, image_to_send)
+        ok, res_msg = send_to_opened_room(msg_template, image_to_send)
 
         if ok:
             success_count += 1
             state["success"] = success_count
-            log(f"  ✉️ [{idx}번째 고객 대화방] 실제 발송 성공 완료!", "success")
+            log(f"  ✉️ [{idx}번째 고객 대화방] 발송 성공 완료!", "success")
         else:
             state["fail"] += 1
             log(f"  ❌ [{idx}번째 대화방] 전송 오류: {res_msg}", "error")
